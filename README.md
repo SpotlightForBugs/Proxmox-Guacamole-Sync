@@ -57,6 +57,200 @@ vnc_settings:"color-depth=32,encoding=tight,read-only=false,cursor=local"
 - `cursor`: local, remote
 - `read-only`: true/false (view-only mode)
 
+## Password Encryption
+
+The tool provides automatic password encryption for enhanced security. When you configure an encryption key, the tool will automatically detect plain passwords in VM notes and offer to encrypt them.
+
+### How It Works
+
+1. **Automatic Detection**: Tool scans VM notes for plain `pass:"password"` entries
+2. **Encryption Offer**: Prompts to encrypt plain passwords during processing
+3. **Seamless Migration**: Converts `pass:"plaintext"` to `encrypted_password:"gAAAAAB..."`
+4. **Non-Destructive**: Preserves all other content in VM notes
+
+### Setup Encryption
+
+**Generate encryption key:**
+```bash
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Output: your_generated_32_character_base64_key_here=
+```
+
+**Add to config.py:**
+```python
+class Config:
+    # ... other settings ...
+    ENCRYPTION_KEY = "your_generated_32_character_base64_key_here="
+```
+
+### Example Migration
+
+**Before (plain password):**
+```
+user:"admin" pass:"MyPassword123" protos:"rdp,ssh";
+```
+
+**After automatic migration:**
+```
+user:"admin" encrypted_password:"gAAAAAB_example_encrypted_token_here_abcd123..." protos:"rdp,ssh";
+```
+
+### Benefits
+
+- **Security**: Passwords encrypted at rest in VM notes
+- **Transparency**: Tool automatically encrypts/decrypts as needed  
+- **Backward Compatibility**: Mixed plain/encrypted passwords supported
+- **Key Validation**: Encryption key tested on startup to prevent issues
+
+## Example Outputs
+
+### Authentication Test
+```bash
+$ uv run python guac_vm_manager.py test-auth
+```
+```
+● Testing API Authentication
+
+✓ Validating encryption key
+✓ Testing Guacamole authentication  
+✓ Testing Proxmox authentication
+
+┌─ Authentication Status ─┐
+│ ✓ All systems ready     │
+└─────────────────────────┘
+```
+
+### VM Discovery and Connection Creation
+```bash
+$ uv run python guac_vm_manager.py add
+```
+```
+● Discovered VMs from Proxmox
+
+┌─────────────┬──────────┬────────────┬───────────────┬─────────────────┐
+│ VM ID       │ Name     │ Status     │ Memory (MB)   │ Node            │
+├─────────────┼──────────┼────────────┼───────────────┼─────────────────┤
+│ 100         │ web-srv  │ running    │ 4096          │ pve1            │
+│ 101         │ db-srv   │ stopped    │ 8192          │ pve2            │
+│ 102         │ win-dev  │ running    │ 2048          │ pve1            │
+└─────────────┴──────────┴────────────┴───────────────┴─────────────────┘
+
+Select VM to add connections for: 102
+
+● Processing VM: win-dev (ID: 102)
+● Starting stopped VM for IP discovery...
+● Waiting for VM network initialization (30s)...
+● Discovered IP: 192.168.1.45
+
+Found credentials in VM notes:
+user:"admin" pass:"WinPass123" protos:"rdp,vnc" rdp_port:"3390";
+
+Creating connections:
+✓ win-dev-admin-rdp (192.168.1.45:3390)
+✓ win-dev-admin-vnc (192.168.1.45:5900)
+✓ Created connection group: win-dev
+
+● Restoring VM to original state (stopped)
+
+┌─ Summary ─┐
+│ ✓ 2 connections created │
+│ ✓ 1 group created       │
+└─────────────────────────┘
+```
+
+### Connection Listing with Sync Status
+```bash
+$ uv run python guac_vm_manager.py list
+```
+```
+● Guacamole Connections (IPv4 only)
+
+┌────────────────────┬─────────────────┬──────────┬──────┬──────────────┬─────────────┐
+│ Connection Name    │ Host            │ Protocol │ Port │ PVE Source   │ Sync Status │
+├────────────────────┼─────────────────┼──────────┼──────┼──────────────┼─────────────┤
+│ web-srv-admin-rdp  │ 192.168.1.50    │ rdp      │ 3389 │ pve1         │ ✓ OK        │
+│ web-srv-admin-ssh  │ 192.168.1.50    │ ssh      │ 22   │ pve1         │ ✓ OK        │
+│ db-srv-root-ssh    │ 192.168.1.51    │ ssh      │ 2222 │ pve2         │ ⚠ Port diff │
+│ win-dev-admin-rdp  │ 192.168.1.45    │ rdp      │ 3390 │ pve1         │ ✓ OK        │
+│ win-dev-admin-vnc  │ 192.168.1.45    │ vnc      │ 5900 │ pve1         │ ✓ OK        │
+│ manual-connection  │ 10.0.1.100      │ rdp      │ 3389 │ (manual)     │ N/A         │
+└────────────────────┴─────────────────┴──────────┴──────┴──────────────┴─────────────┘
+
+PVE Connections: 5 | Manual: 1 | Total: 6
+```
+
+### Auto-Processing All VMs
+```bash
+$ uv run python guac_vm_manager.py auto
+```
+```
+● Auto-processing VMs with credentials
+
+Scanning 15 VMs across 2 nodes...
+
+Processing: web-srv (100)
+├─ IP: 192.168.1.50
+├─ Credentials found: admin (rdp,ssh)
+└─ ✓ Connections up to date
+
+Processing: db-srv (101)  
+├─ Starting VM for IP discovery...
+├─ IP: 192.168.1.51
+├─ Credentials found: root (ssh:2222)
+└─ ⚠ Port mismatch detected - Guac: 22, Notes: 2222
+
+Choose action for db-srv-root-ssh:
+  [u] Update connection (port 22 → 2222)
+  [r] Recreate connection  
+  [i] Ignore for now
+Selection: u
+
+└─ ✓ Updated connection port
+
+Processing: win-dev (102)
+├─ IP: 192.168.1.45  
+├─ Credentials found: admin (rdp:3390,vnc)
+└─ ✓ Connections up to date
+
+Skipped 12 VMs (no credentials in notes)
+
+┌─ Auto-Processing Summary ─┐
+│ Processed: 3 VMs          │
+│ Updated: 1 connection     │
+│ Created: 0 connections    │
+│ Skipped: 12 VMs           │
+└───────────────────────────┘
+```
+
+### Network Discovery Example
+```bash
+$ uv run python guac_vm_manager.py test-network "52:54:00:12:34:56"
+```
+```
+● Testing network discovery for MAC: 52:54:00:12:34:56
+
+Scanning ARP table... 
+├─ Found 23 entries
+├─ No direct match for target MAC
+
+Performing ping sweep on 192.168.1.0/24...
+├─ Scanning 254 addresses
+├─ Found 12 responsive hosts
+├─ Cross-referencing with ARP table...
+└─ No correlation found
+
+Performing ping sweep on 10.0.1.0/24...  
+├─ Scanning 254 addresses
+├─ Found 8 responsive hosts
+├─ Cross-referencing with ARP table...
+└─ ✓ Found match: 10.0.1.45
+
+┌─ Discovery Result ─┐
+│ MAC: 52:54:00:12:34:56  │
+│ IP:  10.0.1.45          │
+└─────────────────────────┘
+```
+
 ## Installation
 
 ### Requirements
@@ -153,6 +347,54 @@ uv run python guac_vm_manager.py auto
 uv run python guac_vm_manager.py list
 # Shows sync status: OK, password mismatch, port change, etc.
 # Run with --verbose for detailed connection parameters
+```
+
+### Interactive Deletion Example
+```bash
+$ uv run python guac_vm_manager.py delete
+```
+```
+● Interactive Connection & Group Deletion
+
+┌─ Available Items ────────────────────────────────────────────────┐
+│ [ ] web-srv (Group - 2 connections)                             │
+│     ├─ [ ] web-srv-admin-rdp (192.168.1.50:3389)               │
+│     └─ [ ] web-srv-admin-ssh (192.168.1.50:22)                 │
+│ [ ] db-srv-root-ssh (192.168.1.51:2222)                        │
+│ [ ] win-dev (Group - 2 connections)                             │
+│     ├─ [ ] win-dev-admin-rdp (192.168.1.45:3390)               │
+│     └─ [ ] win-dev-admin-vnc (192.168.1.45:5900)               │
+│ [ ] manual-connection (10.0.1.100:3389)                         │
+└──────────────────────────────────────────────────────────────────┘
+
+Instructions:
+• Use ↑/↓ to navigate
+• Press SPACE to select/deselect items
+• Press ENTER when done selecting
+• ESC or Ctrl+C to cancel
+
+Selection: 2 items selected
+
+┌─ Confirm Deletion ─┐
+│ Selected items:    │
+│ • db-srv-root-ssh  │
+│ • manual-connection│
+│                    │
+│ Type "DELETE" to   │
+│ confirm permanent  │
+│ removal:           │
+└────────────────────┘
+
+Confirmation: DELETE
+
+● Deleting selected items...
+✓ Deleted connection: db-srv-root-ssh
+✓ Deleted connection: manual-connection
+
+┌─ Deletion Summary ─┐
+│ Connections: 2     │
+│ Groups: 0          │
+└────────────────────┘
 ```
 
 ## API Integration

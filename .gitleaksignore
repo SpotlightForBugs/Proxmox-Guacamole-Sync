@@ -1,0 +1,4 @@
+# Ignore README examples and documentation
+README.md:*
+# Ignore config examples 
+config_example.py:*
