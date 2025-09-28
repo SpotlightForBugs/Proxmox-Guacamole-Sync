@@ -41,15 +41,4 @@
   <text x="25" y="170" class="terminal-text">All authentication tests passed</text>
   
   <text x="10" y="195" class="terminal-text">Ready to sync VM connections!</text>
-  
-  <text x="10" y="95" class="terminal-success">✓</text>
-  <text x="25" y="95" class="terminal-text">Testing Guacamole authentication</text>
-  
-  <text x="10" y="115" class="terminal-success">✓</text>
-  <text x="25" y="115" class="terminal-text">Testing Proxmox authentication</text>
-  
-  <!-- Status box -->
-  <rect x="10" y="135" width="250" height="50" fill="none" stroke="#4ec9b0" stroke-width="1"/>
-  <text x="15" y="150" class="terminal-success">─ Authentication Status ─</text>
-  <text x="15" y="170" class="terminal-success">✓ All systems ready</text>
 </svg>
