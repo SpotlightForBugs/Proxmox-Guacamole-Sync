@@ -13,7 +13,7 @@ class Config:
     GUAC_BASE_URL = "https://your-guacamole-server.example.com"
     GUAC_USERNAME = "your-guac-admin-username"
     GUAC_PASSWORD = "your-guac-admin-password"
-    GUAC_DATA_SOURCE = "mysql"  # or "postgresql", "sqlserver"
+    GUAC_DATA_SOURCE = "mysql"  # or "postgresql", "sqlserver" 
     
     # Proxmox Configuration
     PROXMOX_HOST = "192.168.1.100"  # Your Proxmox server IP

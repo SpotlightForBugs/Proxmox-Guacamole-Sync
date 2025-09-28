@@ -1,21 +1,101 @@
 # Proxmox-Guacamole Sync
 
-A Python tool that automates the creation and management of Apache Guacamole connections for Proxmox VMs. This tool bridges the gap between Proxmox VE and Apache Guacamole, allowing you to automatically create remote connections (RDP, VNC, SSH) based on VM credentials stored in Proxmox VM notes.
+Automated Apache Guacamole connection management from Proxmox (and external hosts) using credentials stored in VM notes.
 
 ## Features
 
-- • **Multi-Protocol Support**: RDP, VNC, and SSH connections
-- • **VM Notes Integration**: Store credentials and settings in Proxmox VM notes
-- • **Wake-on-LAN Support**: Automatically wake VMs before connecting
-- • **Flexible Configuration**: Override settings per connection via VM notes
-- • **Connection Grouping**: Organize connections into groups for better management
-- • **Smart Updates**: Detect and update existing connections when VM details change
-- • **Duplicate Prevention**: Intelligent handling of existing connections
-- • **Customizable Settings**: Per-connection RDP and WoL settings
-- • **Modern CLI Interface**: Typer-based CLI with Rich output formatting
-- • **PVE Source Tracking**: Track which Proxmox node each connection was created from
-- • **Enhanced Hostname Resolution**: Shows both hostname and IP when available
-- • **Clean Authentication**: Silent endpoint probing with professional status display
+Core
+* RDP / VNC / SSH provisioning
+* Single-file tool (Typer + Rich)
+* VM notes parsing with flexible key order & multi-protocol support
+* Template variables: {vmname} {user} {proto} {port} {vmid} {node} {ip} {hostname}
+* Automatic encrypted password handling (Fernet) + migration of plain pass -> encrypted
+
+Discovery & Network
+* Guest agent IP + fallback ARP/ping sweep
+* Prefer IPv4 automatically (ordering + auto-select)
+* Wake-on-LAN (built-in, no deps)
+* Auto-start stopped VM for discovery then restore prior state
+
+Synchronization
+* Out-of-sync detection (hostname, username, password, port, protocol, WoL)
+* Interactive remediation: update / recreate / ignore / pull from Guacamole → notes (bidirectional)
+* Structured credential line auto-append if only free-form notes exist
+* Optional external host onboarding (not in Proxmox)
+
+User Experience
+* Progress indicators for VM fetch, updates, connection creation
+* Early credential apply / ignore / edit prompt
+* Inline credential editor (username, protocol, port, name)
+* Connection grouping per VM (only when >1 connection)
+* Rich tables with node, status, memory, sync issues
+* PVE source tracking for each connection
+
+Safety & Consistency
+* Duplicate + location (parent group) reconciliation
+* Selective WoL disable per credential line
+* Non-destructive VM notes updates (preserve arbitrary text)
+* Idempotent re-runs (no duplicate connections)
+
+CLI
+* add / auto / list / test-auth / test-network / interactive / add-external
+* Auto-skip interactive when non-TTY / tests / CI
+
+## VM Notes Credential Line
+
+```
+user:"admin" pass:"Password" protos:"rdp,ssh" rdp_port:"3390" confName:"{vmname}-{user}-{proto}";
+```
+
+Multiple lines allowed. Parameters may appear in any order. Use `encrypted_password:` instead of `pass:` for encrypted values.
+
+Key tokens (aliases accepted):
+* user / username
+* pass / password / encrypted_password
+* protos / protocols / proto (single)
+* confName / connection_name / default_conf_name
+* rdp_port / vnc_port / ssh_port / port
+* rdp_settings / rdpSettings
+* wol_settings / wolSettings
+* wol_disabled / wolDisabled
+
+## Minimal Usage
+
+```
+uv run python guac_vm_manager.py add
+uv run python guac_vm_manager.py auto
+uv run python guac_vm_manager.py list
+uv run python guac_vm_manager.py add-external
+```
+
+## Encryption Migration
+Plain `pass:` lines are detected and converted to `encrypted_password:` during processing; original notes retained with structured lines appended if missing.
+
+## External Hosts
+`add-external` creates connections without Proxmox dependency (manual hostname + credentials).
+
+## Sync Pull (Guac -> Notes)
+When differences are detected you can choose `g` to rebuild structured credential lines from current Guacamole connection state.
+
+## Requirements
+* Python 3.8+
+* Guacamole API access
+* Proxmox API token (for VM mode)
+
+## Run
+```
+cp config_example.py config.py
+uv sync
+uv run python guac_vm_manager.py
+```
+
+## Exit Codes
+* 0 success / no new work
+* 1 authentication or API failure
+* >1 unexpected runtime error
+
+## Notes
+No emojis permitted (repository policy). All updates are additive and avoid overwriting free-form notes content.
 
 ## Installation
 
