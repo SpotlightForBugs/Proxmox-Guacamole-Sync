@@ -646,6 +646,39 @@ class GuacamoleAPI:
 
         return False
 
+    def move_connection_to_group(self, connection_id: str, group_identifier: str) -> bool:
+        """Move a connection to a specific group"""
+        if not self.auth_token and not self.authenticate():
+            return False
+
+        # Get current connection details
+        connection_details = self.get_connection_details(connection_id)
+        if not connection_details:
+            return False
+
+        # Update the parentIdentifier to move to new group
+        connection_data = connection_details.copy()
+        connection_data['parentIdentifier'] = group_identifier
+
+        # Try different update endpoints
+        update_endpoints = []
+        for base_path in ["/api/session/data/postgresql", "/api/session/data/mysql", "/guacamole/api/session/data/postgresql", "/guacamole/api/session/data/mysql"]:
+            update_endpoints.append(f"{self.config.GUAC_BASE_URL}{base_path}/connections/{connection_id}?token={self.auth_token}")
+
+        for endpoint in update_endpoints:
+            try:
+                response = self.session.put(endpoint, json=connection_data)
+                if response.status_code in (200, 204):
+                    return True
+                elif response.status_code == 404:
+                    continue
+                else:
+                    continue
+            except requests.exceptions.RequestException as e:
+                continue
+
+        return False
+
     def create_connection_group(self, name: str, parent_identifier: str = "ROOT", group_type: str = "ORGANIZATIONAL") -> Optional[str]:
         """Create a connection group to organize multiple connections"""
         if not self.auth_token and not self.authenticate():
@@ -2803,25 +2836,25 @@ def interactive_add_vm(auto_approve: bool = False, start_external: bool = False)
                 break
 
     parent_identifier = None
-    # For Proxmox VMs, create a connection group only if there are multiple connections
-    if not is_external_host:
-        if len(connections_to_create) > 1:
-            if auto_approve:
-                group_name = vm_name
-                console.print(f"[cyan]Creating connection group: {group_name}[/cyan]")
+    # Create a connection group only if there are multiple connections (for both VMs and external hosts)
+    if len(connections_to_create) > 1:
+        if auto_approve:
+            group_name = vm_name
+            console.print(f"[cyan]Creating connection group: {group_name}[/cyan]")
+            parent_identifier = guac_api.create_connection_group(group_name)
+            if parent_identifier is None:
+                console.print("[yellow]Warning: Failed to create connection group. Connections will be created at root level.[/yellow]")
+        else:
+            connection_type = "host" if is_external_host else "VM"
+            group_choice = input(f"Create a connection group for {connection_type} connections? (y/n) [y]: ").strip().lower()
+            if group_choice == "" or group_choice in ("y", "yes"):
+                default_group_name = vm_name
+                group_name = input(f"Group name [{default_group_name}]: ").strip()
+                if not group_name:
+                    group_name = default_group_name
                 parent_identifier = guac_api.create_connection_group(group_name)
                 if parent_identifier is None:
                     console.print("[yellow]Warning: Failed to create connection group. Connections will be created at root level.[/yellow]")
-            else:
-                group_choice = input("Create a connection group for VM connections? (y/n) [y]: ").strip().lower()
-                if group_choice == "" or group_choice in ("y", "yes"):
-                    default_group_name = vm_name
-                    group_name = input(f"Group name [{default_group_name}]: ").strip()
-                    if not group_name:
-                        group_name = default_group_name
-                    parent_identifier = guac_api.create_connection_group(group_name)
-                    if parent_identifier is None:
-                        console.print("[yellow]Warning: Failed to create connection group. Connections will be created at root level.[/yellow]")
 
     # Check for duplicates/existing connections that might need updates
     duplicates = []
@@ -3361,6 +3394,242 @@ def list_connections():
     
     console.print(table)
     return True
+
+def autogroup_connections():
+    """Analyze existing connections and suggest automatic groupings"""
+    config = Config()
+    guac_api = GuacamoleAPI(config)
+    
+    if not guac_api.authenticate():
+        console.print(Panel(" Failed to authenticate with Guacamole", border_style="red"))
+        return False
+    
+    console.print(Panel.fit(" Auto-Group Analysis", border_style="cyan", title="Analyzing Connections"))
+    
+    # Get connections and groups
+    connections = guac_api.get_connections()
+    existing_groups = guac_api.get_connection_groups()
+    
+    if not connections:
+        console.print(Panel(" No connections found to analyze.", border_style="yellow"))
+        return True
+    
+    # Get connection details for analysis
+    connection_details = {}
+    with AnimationManager("Loading connection details", style="cyan") as anim:
+        for conn_id, conn in connections.items():
+            anim.update(f"Loading {conn.get('name', 'connection')}...")
+            details = guac_api.get_connection_details(conn_id)
+            connection_details[conn_id] = {
+                'name': conn.get('name', ''),
+                'protocol': conn.get('protocol', ''),
+                'params': details.get('parameters', {}),
+                'group': conn.get('parentIdentifier')
+            }
+    
+    # Analyze connections for grouping opportunities
+    suggested_groups = analyze_connections_for_grouping(connection_details)
+    
+    if not suggested_groups:
+        console.print(Panel(" No grouping opportunities found.\n All connections are already optimally organized.", border_style="green"))
+        return True
+    
+    # Display suggestions
+    console.print(f"\n[bold green]Found {len(suggested_groups)} grouping opportunities:[/bold green]\n")
+    
+    for i, group in enumerate(suggested_groups, 1):
+        console.print(f"[bold cyan]{i}. Suggested Group: '{group['name']}'[/bold cyan]")
+        console.print(f"   [yellow]Reason: {group['reason']}[/yellow]")
+        console.print(f"   [dim]Connections ({len(group['connections'])}):[/dim]")
+        
+        for conn in group['connections']:
+            protocol = conn['protocol'].upper()
+            hostname = conn['params'].get('hostname', 'N/A')
+            console.print(f"     • {conn['name']} ({protocol}) - {hostname}")
+        console.print()
+    
+    # Ask user if they want to apply suggestions
+    if not typer.confirm("\nApply these grouping suggestions?"):
+        console.print("[yellow]Grouping cancelled.[/yellow]")
+        return True
+    
+    # Apply groupings
+    console.print("\n[green]Creating connection groups...[/green]")
+    
+    success_count = 0
+    error_count = 0
+    
+    for group in suggested_groups:
+        try:
+            # Create the group
+            group_identifier = guac_api.create_connection_group(group['name'])
+            
+            if group_identifier:
+                console.print(f"[green]✓ Created group: {group['name']}[/green]")
+                
+                # Move connections to the group
+                moved_count = 0
+                for conn in group['connections']:
+                    if move_connection_to_group(guac_api, conn['id'], group_identifier):
+                        moved_count += 1
+                    else:
+                        console.print(f"[yellow]  ⚠ Could not move {conn['name']} to group[/yellow]")
+                
+                console.print(f"[dim]  Moved {moved_count}/{len(group['connections'])} connections[/dim]")
+                success_count += 1
+            else:
+                console.print(f"[red]✗ Failed to create group: {group['name']}[/red]")
+                error_count += 1
+                
+        except Exception as e:
+            console.print(f"[red]✗ Error creating group {group['name']}: {e}[/red]")
+            error_count += 1
+    
+    console.print(f"\n[green]Successfully created: {success_count} groups[/green]")
+    if error_count > 0:
+        console.print(f"[red]Failed to create: {error_count} groups[/red]")
+    
+    console.print("\n[cyan]Grouping complete! Use 'list' command to see the new organization.[/cyan]")
+    return True
+
+def analyze_connections_for_grouping(connection_details):
+    """Analyze connections and suggest groupings based on smart patterns"""
+    suggestions = []
+    ungrouped_connections = []
+    
+    # Find connections not already in groups
+    for conn_id, details in connection_details.items():
+        if not details['group'] or details['group'] == 'ROOT':
+            ungrouped_connections.append({
+                'id': conn_id,
+                'name': details['name'],
+                'protocol': details['protocol'],
+                'params': details['params']
+            })
+    
+    if len(ungrouped_connections) < 2:
+        return []
+    
+    # Group by hostname/IP
+    hostname_groups = {}
+    for conn in ungrouped_connections:
+        hostname = conn['params'].get('hostname', '')
+        if hostname:
+            if hostname not in hostname_groups:
+                hostname_groups[hostname] = []
+            hostname_groups[hostname].append(conn)
+    
+    # Suggest groups for same hostname with multiple connections
+    for hostname, connections in hostname_groups.items():
+        if len(connections) > 1:
+            # Try to extract a meaningful name from connection names
+            group_name = suggest_group_name_from_connections(connections, hostname)
+            suggestions.append({
+                'name': group_name,
+                'connections': connections,
+                'reason': f'Same hostname/IP: {hostname}'
+            })
+    
+    # Group by similar names (remove protocol suffixes)
+    remaining_connections = []
+    used_connection_ids = set()
+    
+    for suggestion in suggestions:
+        for conn in suggestion['connections']:
+            used_connection_ids.add(conn['id'])
+    
+    for conn in ungrouped_connections:
+        if conn['id'] not in used_connection_ids:
+            remaining_connections.append(conn)
+    
+    # Analyze name patterns for remaining connections
+    name_pattern_groups = find_name_pattern_groups(remaining_connections)
+    suggestions.extend(name_pattern_groups)
+    
+    return suggestions
+
+def suggest_group_name_from_connections(connections, hostname):
+    """Suggest a meaningful group name from connection names and hostname"""
+    names = [conn['name'] for conn in connections]
+    
+    # Try to find common prefix
+    if len(names) > 1:
+        common_prefix = os.path.commonprefix(names).strip('-_')
+        if len(common_prefix) >= 3:
+            return common_prefix
+    
+    # Try to extract hostname or meaningful part
+    try:
+        import socket
+        resolved_name = socket.gethostbyaddr(hostname)[0]
+        if resolved_name and '.' in resolved_name:
+            return resolved_name.split('.')[0]
+    except:
+        pass
+    
+    # Use the hostname or a cleaned version of the first connection name
+    if hostname and not hostname.startswith('192.168.') and not hostname.startswith('10.'):
+        return hostname
+    
+    # Fall back to cleaned first connection name
+    first_name = names[0]
+    # Remove common suffixes
+    for suffix in ['-rdp', '-ssh', '-vnc', '_rdp', '_ssh', '_vnc']:
+        if first_name.lower().endswith(suffix):
+            return first_name[:-len(suffix)]
+    
+    return first_name
+
+def find_name_pattern_groups(connections):
+    """Find connections that should be grouped based on name patterns"""
+    suggestions = []
+    
+    # Group by base name (removing protocol suffixes)
+    base_name_groups = {}
+    
+    for conn in connections:
+        base_name = extract_base_name(conn['name'])
+        if base_name not in base_name_groups:
+            base_name_groups[base_name] = []
+        base_name_groups[base_name].append(conn)
+    
+    # Suggest groups for base names with multiple connections
+    for base_name, conns in base_name_groups.items():
+        if len(conns) > 1:
+            suggestions.append({
+                'name': base_name,
+                'connections': conns,
+                'reason': f'Similar naming pattern (base: {base_name})'
+            })
+    
+    return suggestions
+
+def extract_base_name(connection_name):
+    """Extract base name by removing common protocol and user suffixes"""
+    name = connection_name.lower()
+    
+    # Remove common patterns
+    patterns_to_remove = [
+        r'-rdp$', r'_rdp$', r'\.rdp$',
+        r'-ssh$', r'_ssh$', r'\.ssh$', 
+        r'-vnc$', r'_vnc$', r'\.vnc$',
+        r'-\d+$',  # Remove port numbers
+        r':\d+$'   # Remove :port
+    ]
+    
+    import re
+    for pattern in patterns_to_remove:
+        name = re.sub(pattern, '', name)
+    
+    # Remove user@ prefix
+    if '@' in name:
+        name = name.split('@')[1]
+    
+    return name.strip('-_.')
+
+def move_connection_to_group(guac_api, connection_id, group_identifier):
+    """Move a connection to a specific group"""
+    return guac_api.move_connection_to_group(connection_id, group_identifier)
 
 def delete_connections_interactive():
     """Interactive deletion mode for connections and groups"""
@@ -4023,6 +4292,15 @@ def delete_connections_cmd():
         console.print(f"[red]Error in delete mode: {e}[/red]")
         raise typer.Exit(1)
 
+@app.command("autogroup")
+def autogroup_connections_cmd():
+    """ Automatically group connections using smart pattern analysis"""
+    try:
+        autogroup_connections()
+    except Exception as e:
+        console.print(f"[red]Error in autogroup mode: {e}[/red]")
+        raise typer.Exit(1)
+
 @app.command("interactive")
 def interactive_menu():
     """ Interactive menu mode"""
@@ -4038,10 +4316,11 @@ def interactive_menu():
             console.print("3.  Add different (external) machine to Guacamole")
             console.print("4.  List Guacamole connections")
             console.print("5.  Delete connections & groups (interactive)")
-            console.print("6.  Show CLI options")
+            console.print("6.  Auto-group connections (smart grouping)")
+            console.print("7.  Show CLI options")
             console.print("0.  Exit")
 
-            choice = typer.prompt("\nEnter choice (0-6)").strip()
+            choice = typer.prompt("\nEnter choice (0-7)").strip()
 
             if choice == "1":
                 interactive_add_vm()
@@ -4054,6 +4333,8 @@ def interactive_menu():
             elif choice == "5":
                 delete_connections_interactive()
             elif choice == "6":
+                autogroup_connections()
+            elif choice == "7":
                 console.print(Panel.fit(" CLI Commands ", border_style="magenta"))
                 cmds = [
                     "interactive  (interactive menu)",
@@ -4061,6 +4342,7 @@ def interactive_menu():
                     "auto         (auto-process all VMs with credentials)",
                     "list         (list existing connections)",
                     "delete       (interactive deletion of connections/groups)",
+                    "autogroup    (smart automatic connection grouping)",
                     "test-auth    (test API authentication)",
                     "test-network <MAC>",
                     "add-external (add non-Proxmox host)",
@@ -4072,7 +4354,7 @@ def interactive_menu():
                 console.print(Panel(" Goodbye!", border_style="green"))
                 break
             else:
-                console.print("[red]Invalid choice. Please enter 0-6.[/red]")
+                console.print("[red]Invalid choice. Please enter 0-7.[/red]")
     
     except KeyboardInterrupt:
         console.print("\n[yellow]Exiting...[/yellow]")
