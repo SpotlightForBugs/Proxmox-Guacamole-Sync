@@ -129,44 +129,8 @@ $ uv run python guac_vm_manager.py list
 ```bash
 $ uv run python guac_vm_manager.py auto
 ```
-```
-● Auto-processing VMs with credentials
 
-Scanning 15 VMs across 2 nodes...
-
-Processing: web-srv (100)
-├─ IP: 192.168.1.50
-├─ Credentials found: admin (rdp,ssh)
-└─ ✓ Connections up to date
-
-Processing: db-srv (101)  
-├─ Starting VM for IP discovery...
-├─ IP: 192.168.1.51
-├─ Credentials found: root (ssh:2222)
-└─ ⚠ Port mismatch detected - Guac: 22, Notes: 2222
-
-Choose action for db-srv-root-ssh:
-  [u] Update connection (port 22 → 2222)
-  [r] Recreate connection  
-  [i] Ignore for now
-Selection: u
-
-└─ ✓ Updated connection port
-
-Processing: win-dev (102)
-├─ IP: 192.168.1.45  
-├─ Credentials found: admin (rdp:3390,vnc)
-└─ ✓ Connections up to date
-
-Skipped 12 VMs (no credentials in notes)
-
-┌─ Auto-Processing Summary ─┐
-│ Processed: 3 VMs          │
-│ Updated: 1 connection     │
-│ Created: 0 connections    │
-│ Skipped: 12 VMs           │
-└───────────────────────────┘
-```
+![Auto-Processing Output](assets/auto-process-output.svg)
 
 ### Network Discovery Example
 ```bash

@@ -1,0 +1,57 @@
+<svg width="750" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .terminal-bg { fill: #1e1e1e; }
+      .terminal-text { fill: #d4d4d4; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 11px; }
+      .terminal-green { fill: #4ec9b0; }
+      .terminal-yellow { fill: #dcdcaa; }
+      .terminal-orange { fill: #ce9178; }
+      .terminal-prompt { fill: #569cd6; }
+      .terminal-success { fill: #4ec9b0; }
+      .terminal-symbol { fill: #d7ba7d; }
+      .terminal-warning { fill: #dcdcaa; }
+      .terminal-border { fill: none; stroke: #4ec9b0; stroke-width: 1; }
+    </style>
+  </defs>
+  
+  <!-- Terminal background -->
+  <rect width="750" height="400" class="terminal-bg"/>
+  
+  <!-- Command line -->
+  <text x="10" y="20" class="terminal-prompt">$</text>
+  <text x="25" y="20" class="terminal-text">uv run python guac_vm_manager.py auto</text>
+  
+  <!-- Title -->
+  <text x="10" y="45" class="terminal-symbol">●</text>
+  <text x="25" y="45" class="terminal-text">Auto-processing VMs with credentials</text>
+  
+  <text x="10" y="70" class="terminal-text">Scanning 15 VMs across 2 nodes...</text>
+  
+  <!-- Processing entries -->
+  <text x="10" y="95" class="terminal-text">Processing: web-srv (100)</text>
+  <text x="10" y="110" class="terminal-text">├─ IP: 192.168.1.50</text>
+  <text x="10" y="125" class="terminal-text">├─ Credentials found: admin (rdp,ssh)</text>
+  <text x="10" y="140" class="terminal-success">└─ ✓ Connections up to date</text>
+  
+  <text x="10" y="165" class="terminal-text">Processing: db-srv (101)</text>
+  <text x="10" y="180" class="terminal-text">├─ Starting VM for IP discovery...</text>
+  <text x="10" y="195" class="terminal-text">├─ IP: 192.168.1.51</text>
+  <text x="10" y="210" class="terminal-text">├─ Credentials found: root (ssh:2222)</text>
+  <text x="10" y="225" class="terminal-warning">└─ ⚠ Port mismatch detected - Guac: 22, Notes: 2222</text>
+  
+  <text x="10" y="250" class="terminal-text">Choose action for db-srv-root-ssh:</text>
+  <text x="15" y="265" class="terminal-text">[u] Update connection (port 22 → 2222)</text>
+  <text x="15" y="280" class="terminal-text">[r] Recreate connection</text>
+  <text x="15" y="295" class="terminal-text">[i] Ignore for now</text>
+  <text x="10" y="310" class="terminal-text">Selection: </text>
+  <text x="80" y="310" class="terminal-yellow">u</text>
+  
+  <text x="10" y="330" class="terminal-success">└─ ✓ Updated connection port</text>
+  
+  <text x="10" y="355" class="terminal-text">Skipped 12 VMs (no credentials in notes)</text>
+  
+  <!-- Summary box -->
+  <rect x="10" y="370" width="280" height="50" class="terminal-border"/>
+  <text x="15" y="385" class="terminal-success">─ Auto-Processing Summary ─</text>
+  <text x="15" y="400" class="terminal-text">Processed: 3 VMs | Updated: 1 | Skipped: 12</text>
+</svg>
