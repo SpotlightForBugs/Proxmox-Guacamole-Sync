@@ -49,7 +49,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 console = Console()
 app = typer.Typer(
     name="guac-vm-manager",
-    help="🔗 Guacamole VM Manager - Sync Proxmox VMs with Apache Guacamole\n\n"
+    help="● Guacamole VM Manager - Sync Proxmox VMs with Apache Guacamole\n\n"
          "Automatically creates remote desktop connections (RDP/VNC/SSH) in Apache Guacamole\n"
          "by parsing VM credentials from Proxmox VM notes. Features IPv4-only networking,\n"
          "interactive connection management, and Wake-on-LAN support.",
