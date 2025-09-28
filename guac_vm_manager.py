@@ -273,7 +273,7 @@ class GuacamoleAPI:
             self.api_base_paths.append(f"/guacamole/api/session/data/{data_source}")
             self.api_base_paths.append(f"/api/session/data/{data_source}")
         
-    def authenticate(self) -> bool:
+    def authenticate(self, silent: bool = False) -> bool:
         """Authenticate with Guacamole and get auth token"""
         # Try different possible endpoint paths
         # /guacamole/api/tokens is for installations in subdirectories
@@ -288,9 +288,11 @@ class GuacamoleAPI:
             'password': self.config.GUAC_PASSWORD
         }
         
-        # Animated authentication
+        # Animated authentication (skip if silent)
         from rich.panel import Panel
-        with AnimationManager("Authenticating with Guacamole"):
+        
+        if silent:
+            # Silent authentication for test-auth command
             for endpoint in endpoints:
                 auth_url = urljoin(self.config.GUAC_BASE_URL, endpoint)
                 try:
@@ -302,7 +304,6 @@ class GuacamoleAPI:
                         if self.auth_token:
                             # Use Guacamole-Token header instead of query parameter (newer versions)
                             self.session.headers.update({'Guacamole-Token': self.auth_token})
-                            console.print(Panel(" Authentication successful!", border_style="green"))
                             return True
                         else:
                             # Silent failure, try next endpoint
@@ -317,8 +318,38 @@ class GuacamoleAPI:
                 except requests.exceptions.RequestException:
                     # Silent failure, try next endpoint
                     continue
+        else:
+            # Normal authentication with animation
+            with AnimationManager("Authenticating with Guacamole"):
+                for endpoint in endpoints:
+                    auth_url = urljoin(self.config.GUAC_BASE_URL, endpoint)
+                    try:
+                        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+                        response = self.session.post(auth_url, data=auth_data, headers=headers)
+                        if response.status_code == 200:
+                            auth_response = response.json()
+                            self.auth_token = auth_response.get('authToken')
+                            if self.auth_token:
+                                # Use Guacamole-Token header instead of query parameter (newer versions)
+                                self.session.headers.update({'Guacamole-Token': self.auth_token})
+                                console.print(Panel(" Authentication successful!", border_style="green"))
+                                return True
+                            else:
+                                # Silent failure, try next endpoint
+                                continue
+                        elif response.status_code == 404:
+                            # Expected for installations without /guacamole prefix
+                            continue
+                        else:
+                            # Silent failure, try next endpoint
+                            continue
+                            
+                    except requests.exceptions.RequestException:
+                        # Silent failure, try next endpoint
+                        continue
         
-        console.print(Panel(" Authentication failed - check credentials and server configuration", border_style="red"))
+        if not silent:
+            console.print(Panel(" Authentication failed - check credentials and server configuration", border_style="red"))
         return False
 
     def _build_api_endpoints(self, resource: str) -> List[str]:
@@ -983,20 +1014,10 @@ class ProxmoxAPI:
         try:
             response = self.session.get(f"{self.config.proxmox_base_url}/version")
             if response.status_code == 200:
-                # Mirror Guacamole success style
-                try:
-                    from rich.panel import Panel
-                    console.print(Panel(" Proxmox authentication successful! ", border_style="green"))
-                except Exception:
-                    print("Proxmox authentication successful")
                 return True
             else:
-                print(f"Proxmox authentication failed: HTTP {response.status_code}")
-                if response.text:
-                    print(f"Response: {response.text}")
                 return False
         except requests.exceptions.RequestException as e:
-            print(f"Proxmox authentication error: {e}")
             return False
     
     def get_nodes(self) -> List[Dict]:
@@ -3336,12 +3357,16 @@ def list_connections():
         # If Proxmox is not accessible, all connections will show as "Unknown"
         pass
     
-    table = Table(title=f" Guacamole Connections ({len(connections)} found)")
-    table.add_column("Name", style="cyan", no_wrap=True, max_width=18)
-    table.add_column("Protocol", style="magenta", max_width=8)
-    table.add_column("Hostname/IP", style="green", min_width=15, max_width=25)
-    table.add_column("PVE Source", style="yellow", justify="center", max_width=10)
-    table.add_column("WoL", justify="center", style="blue", max_width=5)
+    # Create enhanced title with symbols and better formatting
+    title_text = f"● Guacamole Connections ({len(connections)} found)"
+    table = Table(title=title_text, title_style="bold cyan", show_header=True, header_style="bold magenta")
+    
+    table.add_column("Connection Name", style="cyan", no_wrap=False, min_width=20, max_width=30)
+    table.add_column("Host", style="green", min_width=15, max_width=25)
+    table.add_column("Protocol", style="magenta", justify="center", max_width=8)
+    table.add_column("Port", style="yellow", justify="center", max_width=6)
+    table.add_column("PVE Source", style="orange1", justify="center", max_width=12)
+    table.add_column("Sync Status", style="white", justify="center", min_width=12)
     
     for conn_id, conn in connections.items():
         name = conn.get('name', 'N/A')
@@ -3351,9 +3376,7 @@ def list_connections():
         conn_details = guac_api.get_connection_details(conn_id)
         params = conn_details.get('parameters', {})
         
-
-        
-        # Improved hostname resolution: try to resolve hostname by IP, show both when available
+        # Enhanced hostname/IP display
         import socket
         ip_address = params.get('hostname', 'N/A')
         display_hostname = ip_address
@@ -3362,18 +3385,27 @@ def list_connections():
             try:
                 # Try to resolve hostname from IP address
                 resolved_hostname = socket.gethostbyaddr(ip_address)[0]
-                # Show both hostname and IP for clarity: "hostname (IP)"
-                display_hostname = f"{resolved_hostname} ({ip_address})"
+                # Show just the hostname for cleaner display
+                if len(resolved_hostname) > 20:
+                    # Truncate long hostnames
+                    display_hostname = f"{resolved_hostname[:17]}..."
+                else:
+                    display_hostname = resolved_hostname
             except (socket.herror, socket.gaierror, OSError):
                 # If resolution fails, just show the IP address
                 display_hostname = ip_address
         
-        # Improved WoL detection: check for wol-send-packet and wol-mac-addr
+        # Get port from parameters
+        port_mapping = {
+            'rdp': params.get('port', '3389'),
+            'vnc': params.get('port', '5900'),
+            'ssh': params.get('port', '22')
+        }
+        port = port_mapping.get(protocol.lower(), params.get('port', 'N/A'))
+        
+        # Improved WoL detection and sync status
         wol_send_param = params.get('wol-send-packet', False)
         wol_mac_param = params.get('wol-mac-addr', '')
-        
-        # WoL is enabled if wol-send-packet is true AND there's a MAC address
-        wol_enabled = 'No'  # Default to No
         
         # Check wol-send-packet parameter
         if isinstance(wol_send_param, str):
@@ -3384,13 +3416,32 @@ def list_connections():
             send_packet_enabled = False
         
         # WoL is enabled if both send-packet is true and MAC address is present
-        if send_packet_enabled and wol_mac_param and wol_mac_param.strip():
-            wol_enabled = 'Yes'
+        wol_enabled = send_packet_enabled and wol_mac_param and wol_mac_param.strip()
         
         # Get PVE source from pre-built mapping
         pve_source = connection_to_pve_source.get(name, "Manual")
         
-        table.add_row(name, protocol.upper(), display_hostname, pve_source, wol_enabled)
+        # Enhanced sync status with symbols
+        if pve_source != "Manual":
+            # Check if port matches expected defaults
+            expected_ports = {'rdp': '3389', 'vnc': '5900', 'ssh': '22'}
+            expected_port = expected_ports.get(protocol.lower())
+            
+            if expected_port and port != expected_port:
+                sync_status = "[yellow]⚠ Port diff[/yellow]"
+            else:
+                sync_status = "[green]✓ OK[/green]"
+        else:
+            sync_status = "[dim]Manual[/dim]"
+        
+        table.add_row(
+            name, 
+            display_hostname, 
+            protocol.upper(),
+            str(port),
+            pve_source,
+            sync_status
+        )
     
     console.print(table)
     return True
@@ -3955,191 +4006,207 @@ def process_single_vm_auto(config, proxmox_api, guac_api, node_name, vm, credent
 
 
 def auto_process_all_vms(force=False):
-    """Auto-process all VMs with credentials in notes with beautiful output."""
+    """Auto-process all VMs with credentials in notes with enhanced output."""
     import time
     import threading
+    from rich.text import Text
     
-    # Beautiful header
-    console.print(Panel("AUTO VM PROCESSOR", title="Auto Processor", border_style="blue"))
+    # Enhanced header with better styling
+    title_text = Text("● AUTO VM PROCESSOR", style="bold cyan")
+    console.print(Panel(
+        title_text,
+        title="[bold]Auto Processor[/bold]",
+        border_style="blue",
+        padding=(0, 2)
+    ))
+    
     if force:
-        console.print("[yellow]FORCE MODE: Recreating all existing connections[/yellow]")
+        console.print(Panel(
+            "[bold yellow]FORCE MODE:[/bold yellow] Recreating all existing connections",
+            border_style="yellow"
+        ))
     
-    # Initialize services
-    console.print("\n[cyan]Initializing services...[/cyan]")
-    loading_chars = "|/-\\"
-    loading_stop = threading.Event()
-    
-    def loading_animation():
-        i = 0
-        while not loading_stop.is_set():
-            print(f"\r   {loading_chars[i % len(loading_chars)]} Loading...", end="", flush=True)
-            i += 1
-            time.sleep(0.1)
-    
-    loading_thread = threading.Thread(target=loading_animation, daemon=True)
-    loading_thread.start()
-    
-    try:
-        config = Config()
-        proxmox_api = ProxmoxAPI(config)
-        guac_api = GuacamoleAPI(config)
+    # Initialize services with Rich progress
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Initializing services...", total=None)
         
-        # Test connections
-        nodes = proxmox_api.get_nodes()
-        guac_api.authenticate()
-        guac_api.get_connections()
-        
-        loading_stop.set()
-        loading_thread.join()
-        print("\r Services initialized successfully!                    ")
-        
-    except Exception as e:
-        loading_stop.set()
-        loading_thread.join()
-        print(f"\r Failed to initialize services: {e}                    ")
-        return
+        try:
+            config = Config()
+            proxmox_api = ProxmoxAPI(config)
+            guac_api = GuacamoleAPI(config)
+            
+            # Test connections
+            nodes = proxmox_api.get_nodes()
+            guac_api.authenticate()
+            guac_api.get_connections()
+            
+            progress.update(task, description="Services initialized successfully!")
+            progress.stop()
+            console.print("[green]✓[/green] Services initialized successfully!")
+            
+        except Exception as e:
+            progress.stop()
+            console.print(f"[red]✗ Failed to initialize services: {e}[/red]")
+            return
     
-    # Find VMs with credentials
-    print("\n Scanning for VMs with credentials...")
+    # Find VMs with credentials using Rich progress
     vms_with_creds = []
     
-    progress_chars = "|/-\\"
-    for i, node in enumerate(nodes):
-        node_name = node['node']
-        if progress_chars:
-            char = progress_chars[i % len(progress_chars)]
-        else:
-            char = '-'
-        print(f"\r   {char} Scanning node: {node_name}...", end="", flush=True)
+    console.print("\n[bold]● Scanning for VMs with credentials[/bold]")
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        scanning_task = progress.add_task("Scanning nodes...", total=len(nodes))
         
-        # Get VMs for this node
-        vms = proxmox_api.get_vms(node_name)
-        
-        for vm in vms:
-            vm_id = vm['vmid']
+        for i, node in enumerate(nodes):
+            node_name = node['node']
+            progress.update(scanning_task, description=f"Scanning node: {node_name}")
             
-            # Get VM config to check notes
-            try:
-                vm_config = proxmox_api.get_vm_config(node_name, vm_id)
-                notes = vm_config.get('description', '')
+            # Get VMs for this node
+            vms = proxmox_api.get_vms(node_name)
+            
+            for vm in vms:
+                vm_id = vm['vmid']
                 
-                # Parse credentials from notes
-                parsed_creds = proxmox_api.parse_credentials_from_notes(notes, vm.get('name', ''), str(vm_id), node_name, 'unknown')
-                if parsed_creds:
-                    vms_with_creds.append({
-                        'node': node_name,
-                        'vm': vm,
-                        'credentials': parsed_creds
-                    })
-            except:
-                continue
+                # Get VM config to check notes
+                try:
+                    vm_config = proxmox_api.get_vm_config(node_name, vm_id)
+                    notes = vm_config.get('description', '')
+                    
+                    # Parse credentials from notes
+                    parsed_creds = proxmox_api.parse_credentials_from_notes(notes, vm.get('name', ''), str(vm_id), node_name, 'unknown')
+                    if parsed_creds:
+                        vms_with_creds.append({
+                            'node': node_name,
+                            'vm': vm,
+                            'credentials': parsed_creds
+                        })
+                except:
+                    continue
+            
+            progress.advance(scanning_task)
+        
+        progress.update(scanning_task, description=f"Found {len(vms_with_creds)} VMs with credentials!")
     
-    print(f"\r Found {len(vms_with_creds)} VMs with credentials!                    ")
+    console.print(f"[green]✓[/green] Found [bold]{len(vms_with_creds)}[/bold] VMs with credentials!")
     
     if not vms_with_creds:
-        print("\n No VMs found with credentials in notes.")
-        print("   Add credentials to VM notes in the format:")
-        print("   username:myuser")
-        print("   password:mypass")
-        print("   protocols:rdp,vnc")
+        console.print(Panel(
+            "[yellow]No VMs found with credentials in notes[/yellow]\n\n"
+            "Add credentials to VM notes in the format:\n"
+            '[cyan]user:"admin" pass:"password" protos:"rdp,ssh"[/cyan]',
+            title="[yellow]No Credentials Found[/yellow]",
+            border_style="yellow"
+        ))
         return
     
-    # Process each VM
-    print(f"\n Processing {len(vms_with_creds)} VMs...")
-    print("-" * 60)
+    # Process each VM with enhanced Rich progress
+    console.print(f"\n[bold]● Processing [cyan]{len(vms_with_creds)}[/cyan] VMs[/bold]")
     
     success_count = 0
     skip_count = 0
     error_count = 0
     
-    for i, vm_data in enumerate(vms_with_creds):
-        vm = vm_data['vm']
-        node_name = vm_data['node']
-        creds = vm_data['credentials']
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        "[progress.percentage]{task.percentage:>3.0f}%",
+        "•",
+        TextColumn("{task.completed}/{task.total}"),
+        console=console,
+    ) as progress:
+        main_task = progress.add_task("Processing VMs...", total=len(vms_with_creds))
         
-        vm_name = vm.get('name', f"VM-{vm['vmid']}")
-        progress = f"[{i+1}/{len(vms_with_creds)}]"
-        
-        print(f"\n{progress}   {vm_name}")
-        
-        # Fancy progress bar
-        bar_width = 30
-        filled = int((i / len(vms_with_creds)) * bar_width)
-        bar = "" * filled + "" * (bar_width - filled)
-        percentage = int((i / len(vms_with_creds)) * 100)
-        print(f"   Progress: |{bar}| {percentage}%")
-        
-        # Check if ALL connections for this VM already exist (proper duplicate checking)
-        all_exist = True
-        existing_connections = []
-        
-        for cred in creds:
-            connection_name = cred['connection_name']
-            existing = guac_api.get_connection_by_name(connection_name)
-            if existing:
-                existing_connections.append((connection_name, existing))
-            else:
-                all_exist = False
-        
-        if all_exist and not force:
-            print(f"   ⏭  All connections already exist (use --force to recreate)")
-            skip_count += len(creds)
-            continue
-        
-        if existing_connections and force:
-            print(f"     Removing {len(existing_connections)} existing connection(s)...")
-            for conn_name, existing in existing_connections:
-                try:
-                    success = guac_api.delete_connection(existing['identifier'])
-                    if success:
-                        print(f"       Deleted: {conn_name}")
-                    else:
-                        print(f"        Could not delete: {conn_name}")
-                except Exception as e:
-                    print(f"       Failed to delete {conn_name}: {e}")
-        
-        # Process VM
-        try:
-            print(f"    Processing...")
+        for i, vm_data in enumerate(vms_with_creds):
+            vm = vm_data['vm']
+            node_name = vm_data['node']
+            creds = vm_data['credentials']
             
-            # Animate processing
-            process_chars = "|/-\\"
-            for j in range(10):  # Short animation
-                print(f"\r   {process_chars[j % len(process_chars)]} Processing...", end="", flush=True)
-                time.sleep(0.1)
+            vm_name = vm.get('name', f"VM-{vm['vmid']}")
+            progress.update(main_task, description=f"Processing: {vm_name}")
             
-            # Actually process the VM - simplified auto processing
-            result = process_single_vm_auto(config, proxmox_api, guac_api, node_name, vm, creds, force)
+            console.print(f"\n[bold cyan]● {vm_name}[/bold cyan] [dim]({i+1}/{len(vms_with_creds)})[/dim]")
             
-            if result:
-                print(f"\r    Successfully added!                    ")
-                success_count += 1
-            else:
-                print(f"\r    Failed to add                        ")
-                error_count += 1
+            # Check if ALL connections for this VM already exist (proper duplicate checking)
+            all_exist = True
+            existing_connections = []
+            
+            for cred in creds:
+                connection_name = cred['connection_name']
+                existing = guac_api.get_connection_by_name(connection_name)
+                if existing:
+                    existing_connections.append((connection_name, existing))
+                else:
+                    all_exist = False
+            
+            if all_exist and not force:
+                console.print("  [yellow]⏭ All connections already exist (use --force to recreate)[/yellow]")
+                skip_count += len(creds)
+                progress.advance(main_task)
+                continue
+            
+            if existing_connections and force:
+                console.print(f"  [yellow]● Removing {len(existing_connections)} existing connection(s)[/yellow]")
+                for conn_name, existing in existing_connections:
+                    try:
+                        success = guac_api.delete_connection(existing['identifier'])
+                        if success:
+                            console.print(f"    [green]✓[/green] Deleted: {conn_name}")
+                        else:
+                            console.print(f"    [red]✗[/red] Could not delete: {conn_name}")
+                    except Exception as e:
+                        console.print(f"    [red]✗[/red] Failed to delete {conn_name}: {e}")
+            
+            # Process VM
+            try:
+                console.print("  [cyan]● Processing connections...[/cyan]")
                 
-        except Exception as e:
-            print(f"\r    Error: {str(e)[:50]}...                ")
-            error_count += 1
+                # Actually process the VM - simplified auto processing
+                result = process_single_vm_auto(config, proxmox_api, guac_api, node_name, vm, creds, force)
+                
+                if result:
+                    console.print("  [green]✓ Successfully added![/green]")
+                    success_count += 1
+                else:
+                    console.print("  [red]✗ Failed to add[/red]")
+                    error_count += 1
+                    
+            except Exception as e:
+                console.print(f"  [red]✗ Error: {str(e)[:50]}...[/red]")
+                error_count += 1
+            
+            progress.advance(main_task)
     
-    # Final progress bar
-    bar_width = 30
-    bar = "" * bar_width
-    print(f"\n   Progress: |{bar}| 100%")
+    # Enhanced summary
+    console.print("\n" + "="*60)
+    console.print(Panel.fit(
+        "[bold green]● PROCESSING COMPLETE![/bold green]",
+        border_style="green",
+        padding=(0, 2)
+    ))
     
-    # Summary
-    print("\n" + "=" * 60)
-    print(" PROCESSING COMPLETE!")
-    print("=" * 60)
-    print(f" Successfully processed: {success_count}")
-    print(f"⏭  Skipped (existing):    {skip_count}")
-    print(f" Errors:                {error_count}")
-    print(f" Total VMs processed:   {len(vms_with_creds)}")
+    # Create summary table
+    summary_table = Table(show_header=False, padding=(0, 2))
+    summary_table.add_column("Metric", style="cyan", min_width=20)
+    summary_table.add_column("Count", style="white", justify="right")
+    summary_table.add_column("Status", style="white")
+    
+    summary_table.add_row("Successfully processed", str(success_count), "[green]✓[/green]" if success_count > 0 else "")
+    summary_table.add_row("Skipped (existing)", str(skip_count), "[yellow]⏭[/yellow]" if skip_count > 0 else "")  
+    summary_table.add_row("Errors", str(error_count), "[red]✗[/red]" if error_count > 0 else "")
+    summary_table.add_row("Total VMs processed", str(len(vms_with_creds)), "")
+    
+    console.print(summary_table)
     
     if success_count > 0:
-        print(f"\n {success_count} new connections ready in Guacamole!")
+        console.print(f"\n[bold green]{success_count} new connections ready in Guacamole![/bold green]")
     
-    print("\n" + "=" * 60)
+    console.print("=" * 60)
 
 
 @app.command("add")
@@ -4177,25 +4244,79 @@ def list_connections_cmd():
 
 @app.command("test-auth")
 def test_auth():
-    """ Test Proxmox API authentication"""
+    """ Test API Authentication (Both Proxmox and Guacamole)"""
+    from rich.text import Text
+    
+    # Create header panel
+    console.print(Panel.fit(
+        Text(" API Authentication Test", style="bold cyan"),
+        border_style="cyan",
+        padding=(0, 2)
+    ))
+    
     try:
         config = Config()
-        proxmox_api = ProxmoxAPI(config)
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Testing authentication...", total=None)
-            result = proxmox_api.test_auth()
-            progress.update(task, completed=True)
-            
-        if result:
-            console.print(Panel(" Authentication successful!", border_style="green"))
+        all_passed = True
+        
+        # Step 1: Encryption Key Validation
+        console.print("\n[bold]● Testing API Authentication[/bold]")
+        
+        step_symbol = "✓"
+        try:
+            from cryptography.fernet import Fernet
+            key = getattr(config, 'ENCRYPTION_KEY', None)
+            if key:
+                f = Fernet(key)
+                test_plain = b"verification-test"
+                token = f.encrypt(test_plain)
+                if f.decrypt(token) == test_plain:
+                    console.print(f"[green]{step_symbol}[/green] Validating encryption key")
+                else:
+                    console.print("[red]✗[/red] Encryption key round-trip failed")
+                    all_passed = False
+            else:
+                console.print("[yellow]⚠[/yellow] No encryption key configured")
+        except Exception as e:
+            console.print(f"[red]✗[/red] Encryption key validation failed: {e}")
+            all_passed = False
+        
+        # Step 2: Guacamole Authentication
+        try:
+            guac_api = GuacamoleAPI(config)
+            if guac_api.authenticate(silent=True):
+                console.print(f"[green]{step_symbol}[/green] Testing Guacamole authentication")
+            else:
+                console.print("[red]✗[/red] Guacamole authentication failed")
+                all_passed = False
+        except Exception as e:
+            console.print(f"[red]✗[/red] Guacamole authentication error: {e}")
+            all_passed = False
+        
+        # Step 3: Proxmox Authentication
+        try:
+            proxmox_api = ProxmoxAPI(config)
+            # Override the test_auth to not print its own panel
+            response = proxmox_api.session.get(f"{config.proxmox_base_url}/version")
+            if response.status_code == 200:
+                console.print(f"[green]{step_symbol}[/green] Testing Proxmox authentication")
+            else:
+                console.print(f"[red]✗[/red] Proxmox authentication failed: HTTP {response.status_code}")
+                all_passed = False
+        except Exception as e:
+            console.print(f"[red]✗[/red] Proxmox authentication error: {e}")
+            all_passed = False
+        
+        # Final result
+        if all_passed:
+            console.print(f"\n[green]{step_symbol}[/green] All authentication tests passed")
+            console.print("\n[dim]Ready to sync VM connections![/dim]")
         else:
-            console.print(Panel(" Authentication failed!", border_style="red"))
+            console.print("\n[red]✗[/red] Some authentication tests failed")
+            console.print("\n[dim]Please check your configuration and try again.[/dim]")
+            raise typer.Exit(1)
+            
     except Exception as e:
-        console.print(f"[red]Error testing authentication: {e}[/red]")
+        console.print(f"\n[red]✗ Error during authentication testing: {e}[/red]")
         raise typer.Exit(1)
 
 @app.command("debug-vms")
@@ -4304,23 +4425,50 @@ def autogroup_connections_cmd():
 @app.command("interactive")
 def interactive_menu():
     """ Interactive menu mode"""
+    from rich.text import Text
+    from rich.columns import Columns
+    from rich.align import Align
+    
     if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("GUAC_SKIP_INTERACTIVE") or os.environ.get("CI"):
         return
-    console.print(Panel.fit(" Guacamole VM Manager", border_style="cyan", title="Welcome"))
+        
+    # Enhanced welcome header
+    header_text = Text("Guacamole VM Manager", style="bold cyan", justify="center")
+    console.print(Panel(
+        header_text,
+        border_style="cyan",
+        title="[bold]Welcome[/bold]",
+        padding=(1, 2)
+    ))
     
     try:
         while True:
-            console.print("\n[bold cyan]Select an option:[/bold cyan]")
-            console.print("1.  Manually add Proxmox VM to Guacamole")
-            console.print("2.  Automatically add all configured Proxmox VMs")
-            console.print("3.  Add different (external) machine to Guacamole")
-            console.print("4.  List Guacamole connections")
-            console.print("5.  Delete connections & groups (interactive)")
-            console.print("6.  Auto-group connections (smart grouping)")
-            console.print("7.  Show CLI options")
-            console.print("0.  Exit")
-
-            choice = typer.prompt("\nEnter choice (0-7)").strip()
+            # Enhanced menu with better visual structure
+            menu_items = [
+                ("1", "● Manually add Proxmox VM", "cyan"),
+                ("2", "● Auto-process all configured VMs", "green"), 
+                ("3", "● Add external host connection", "yellow"),
+                ("4", "● List existing connections", "blue"),
+                ("5", "● Delete connections & groups", "red"),
+                ("6", "● Auto-group connections", "magenta"),
+                ("7", "● Show CLI command reference", "orange1"),
+                ("0", "● Exit application", "white")
+            ]
+            
+            console.print("\n[bold]Available Actions:[/bold]")
+            
+            # Create a nicely formatted menu table
+            menu_table = Table(show_header=False, show_lines=False, padding=(0, 1))
+            menu_table.add_column("Choice", style="bold white", width=3)
+            menu_table.add_column("Action", min_width=30)
+            
+            for num, desc, color in menu_items:
+                menu_table.add_row(f"[{color}]{num}[/{color}]", f"[{color}]{desc}[/{color}]")
+            
+            console.print(menu_table)
+            
+            # Enhanced prompt using Rich console.input for proper markup rendering
+            choice = console.input("\n[bold cyan]Enter your choice[/bold cyan] [dim](0-7)[/dim]: ").strip()
 
             if choice == "1":
                 interactive_add_vm()
@@ -4335,31 +4483,61 @@ def interactive_menu():
             elif choice == "6":
                 autogroup_connections()
             elif choice == "7":
-                console.print(Panel.fit(" CLI Commands ", border_style="magenta"))
-                cmds = [
-                    "interactive  (interactive menu)",
-                    "add          (manually add one Proxmox VM)",
-                    "auto         (auto-process all VMs with credentials)",
-                    "list         (list existing connections)",
-                    "delete       (interactive deletion of connections/groups)",
-                    "autogroup    (smart automatic connection grouping)",
-                    "test-auth    (test API authentication)",
-                    "test-network <MAC>",
-                    "add-external (add non-Proxmox host)",
-                    "--onboarding (rerun onboarding wizard)"
+                # Enhanced CLI reference display
+                console.print(Panel.fit(
+                    "[bold]CLI Command Reference[/bold]",
+                    border_style="magenta",
+                    padding=(0, 2)
+                ))
+                
+                cli_table = Table(show_header=True, header_style="bold magenta")
+                cli_table.add_column("Command", style="cyan", min_width=15)
+                cli_table.add_column("Description", style="white")
+                
+                commands = [
+                    ("interactive", "Interactive menu (current mode)"),
+                    ("add", "Manually add one Proxmox VM"),
+                    ("auto", "Auto-process all VMs with credentials"),
+                    ("auto --force", "Force recreate all connections"),
+                    ("list", "List existing connections"),
+                    ("delete", "Interactive deletion mode"),
+                    ("autogroup", "Smart connection grouping"),
+                    ("test-auth", "Test API authentication"),
+                    ("test-network", "Test network scanning for MAC"),
+                    ("add-external", "Add non-Proxmox host"),
+                    ("--onboarding", "Rerun setup wizard")
                 ]
-                for c in cmds:
-                    console.print(f"  {c}")
+                
+                for cmd, desc in commands:
+                    cli_table.add_row(cmd, desc)
+                
+                console.print(cli_table)
+                
             elif choice == "0":
-                console.print(Panel(" Goodbye!", border_style="green"))
+                console.print(Panel(
+                    "[bold green]Thank you for using Guacamole VM Manager![/bold green]",
+                    border_style="green",
+                    padding=(0, 2)
+                ))
                 break
             else:
-                console.print("[red]Invalid choice. Please enter 0-7.[/red]")
+                console.print(Panel(
+                    f"[red]Invalid choice: '{choice}'[/red]\nPlease enter a number between 0-7",
+                    border_style="red",
+                    title="[red]Error[/red]"
+                ))
     
     except KeyboardInterrupt:
-        console.print("\n[yellow]Exiting...[/yellow]")
+        console.print(Panel(
+            "[yellow]Operation cancelled by user[/yellow]",
+            border_style="yellow"
+        ))
     except Exception as e:
-        console.print(f"[red]Unexpected error: {e}[/red]")
+        console.print(Panel(
+            f"[red]Unexpected error: {e}[/red]",
+            border_style="red",
+            title="[red]Error[/red]"
+        ))
         raise typer.Exit(1)
 
 @app.callback(invoke_without_command=True)
