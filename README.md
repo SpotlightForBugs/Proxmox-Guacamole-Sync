@@ -4,14 +4,18 @@ A Python tool that automates the creation and management of Apache Guacamole con
 
 ## Features
 
-- 🔗 **Multi-Protocol Support**: RDP, VNC, and SSH connections
-- 📝 **VM Notes Integration**: Store credentials and settings in Proxmox VM notes
-- 🌐 **Wake-on-LAN Support**: Automatically wake VMs before connecting
-- 🎛️ **Flexible Configuration**: Override settings per connection via VM notes
-- 📁 **Connection Grouping**: Organize connections into groups for better management
-- 🔧 **Smart Updates**: Detect and update existing connections when VM details change
-- 🚀 **Duplicate Prevention**: Intelligent handling of existing connections
-- ⚙️ **Customizable Settings**: Per-connection RDP and WoL settings
+- • **Multi-Protocol Support**: RDP, VNC, and SSH connections
+- • **VM Notes Integration**: Store credentials and settings in Proxmox VM notes
+- • **Wake-on-LAN Support**: Automatically wake VMs before connecting
+- • **Flexible Configuration**: Override settings per connection via VM notes
+- • **Connection Grouping**: Organize connections into groups for better management
+- • **Smart Updates**: Detect and update existing connections when VM details change
+- • **Duplicate Prevention**: Intelligent handling of existing connections
+- • **Customizable Settings**: Per-connection RDP and WoL settings
+- • **Modern CLI Interface**: Typer-based CLI with Rich output formatting
+- • **PVE Source Tracking**: Track which Proxmox node each connection was created from
+- • **Enhanced Hostname Resolution**: Shows both hostname and IP when available
+- • **Clean Authentication**: Silent endpoint probing with professional status display
 
 ## Installation
 
@@ -71,7 +75,7 @@ Store connection credentials in your Proxmox VM notes using this format:
 
 ### New Flexible Syntax
 
-**🆕 One user per line with multiple protocols and arbitrary parameter order!**
+**[NEW] One user per line with multiple protocols and arbitrary parameter order!**
 
 ```
 user:"username" pass:"password" protos:"protocol1,protocol2" [port_overrides] [settings];
@@ -300,16 +304,16 @@ The tool can automatically encrypt existing plain passwords in VM notes. When it
 2. **Tool Output:**
    ```
     User: admin, Protocol: RDP, Port: 3389
-   🎛️  RDP Settings: color-depth=32, enable-wallpaper=false
-   ⏸️  WoL: Disabled
+   RDP Settings: color-depth=32, enable-wallpaper=false
+   WoL: Disabled
     Connection Name: admin@Windows-rdp
    
     User: developer, Protocol: RDP, Port: 3391
-   🌐 WoL Settings: udp-port=7
+   WoL Settings: udp-port=7
     Connection Name: developer@Windows-rdp
    
     User: developer, Protocol: SSH, Port: 22
-   🌐 WoL Settings: udp-port=7  
+   WoL Settings: udp-port=7  
     Connection Name: developer@Windows-ssh
    
     User: backup, Protocol: VNC, Port: 5901
@@ -327,34 +331,47 @@ pass:"pass123" ssh_port:"2222" protos:"rdp,ssh" user:"admin";
 
 ## Usage
 
+### Modern CLI Interface
+
+The tool now features a modern Typer-based CLI with rich output and clean authentication:
+
 ```bash
 # Interactive mode - pick a VM and set it up
-uv run guac_vm_manager.py --add
+uv run python guac_vm_manager.py add
 
-# Automation mode - no prompts, uses VM notes for credentials
-uv run guac_vm_manager.py --add -y
+# List connections with PVE source tracking and hostname resolution
+uv run python guac_vm_manager.py list
 
-# List what's already configured  
-uv run guac_vm_manager.py --list
+# Test authentication with beautiful, clean output
+uv run python guac_vm_manager.py test-auth
 
-# Test if everything's working
-uv run guac_vm_manager.py --test-auth
+# Interactive menu (default when no command given)
+uv run python guac_vm_manager.py
 ```
 
 ### Other Commands
 
 ```bash
-# List existing connections
-uv run guac_vm_manager.py --list
+# List existing connections with PVE source tracking
+uv run python guac_vm_manager.py list
 
-# Test Proxmox authentication
-uv run guac_vm_manager.py --test-auth
+# Test API authentication (clean, beautiful output)
+uv run python guac_vm_manager.py test-auth
 
 # Test network scanning for specific MAC
-uv run guac_vm_manager.py --test-network "aa:bb:cc:dd:ee:ff"
+uv run python guac_vm_manager.py test-network "aa:bb:cc:dd:ee:ff"
 
-# Debug VM listing
-uv run guac_vm_manager.py --debug-vms
+# Debug VM listing with full API response
+uv run python guac_vm_manager.py debug-vms
+
+# Auto-process all VMs with credentials in notes
+uv run python guac_vm_manager.py auto
+
+# Force recreate all connections
+uv run python guac_vm_manager.py auto --force
+
+# Interactive menu mode (default when no command specified)
+uv run python guac_vm_manager.py interactive
 ```
 
 ## How it works

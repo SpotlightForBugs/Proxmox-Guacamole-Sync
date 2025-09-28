@@ -1,4 +1,13 @@
 repos:
+  - repo: local
+    hooks:
+      - id: check-no-emojis
+        name: Check no emojis
+        entry: python scripts/check_no_emojis.py
+        language: system
+        files: '\.(py|md|sh|txt|yaml|yml|json|ini|cfg|toml)$'
+        stages: [pre-commit]
+repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.28.0
     hooks:
