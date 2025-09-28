@@ -15,7 +15,7 @@ Automated synchronization tool that bridges Proxmox VE and Apache Guacamole by p
 ### VM Credential Management
 - Parse connection credentials from Proxmox VM notes using flexible key-value syntax
 - Support for RDP, VNC, and SSH protocols with protocol-specific settings
-- Automatic password encryption/decryption using Fernet symmetric encryption
+- **Automatic password encryption** - All passwords encrypted transparently using Fernet
 - Template variable substitution: `{vmname}`, `{user}`, `{proto}`, `{port}`, `{vmid}`, `{node}`, `{ip}`, `{hostname}`
 
 ### Network Intelligence
@@ -58,16 +58,17 @@ vnc_settings:"color-depth=32,encoding=tight,read-only=false,cursor=local"
 - `read-only`: true/false (view-only mode)
 
 <details>
-<summary><strong>🔐 Password Encryption (Optional Security Feature)</strong></summary>
+<summary><strong>🔐 Automatic Password Encryption (Built-in Security)</strong></summary>
 
-The tool provides automatic password encryption for enhanced security. When you configure an encryption key, the tool will automatically detect plain passwords in VM notes and offer to encrypt them.
+The tool automatically encrypts all passwords for security. When an encryption key is configured, plain passwords in VM notes are automatically detected and encrypted during processing - no user intervention required.
 
 ### How It Works
 
 1. **Automatic Detection**: Tool scans VM notes for plain `pass:"password"` entries
-2. **Encryption Offer**: Prompts to encrypt plain passwords during processing
+2. **Automatic Encryption**: Plain passwords are immediately encrypted during processing
 3. **Seamless Migration**: Converts `pass:"plaintext"` to `encrypted_password:"gAAAAAB..."`
 4. **Non-Destructive**: Preserves all other content in VM notes
+5. **Transparent Usage**: Encrypted passwords work exactly like plain passwords
 
 ### Setup Encryption
 
@@ -98,9 +99,10 @@ user:"admin" encrypted_password:"gAAAAABhZ8X2mF1nQ7vP4sE6tA5wK3hL9mN0pQ2rT8uY7iO
 
 ### Benefits
 
-- **Security**: Passwords encrypted at rest in VM notes
-- **Transparency**: Tool automatically encrypts/decrypts as needed  
-- **Backward Compatibility**: Mixed plain/encrypted passwords supported
+- **Automatic Security**: All passwords encrypted at rest in VM notes without user action
+- **Zero Configuration**: Works transparently once encryption key is set
+- **Seamless Migration**: Plain passwords automatically converted during first use
+- **Backward Compatibility**: Handles both plain and encrypted passwords during transition
 - **Key Validation**: Encryption key tested on startup to prevent issues
 
 </details>
@@ -205,7 +207,7 @@ class Config:
     PROXMOX_TOKEN_ID = "root@pam!token_name"
     PROXMOX_SECRET = "token_secret"
     
-    # Password encryption (optional)
+    # Password encryption (required for automatic encryption)
     ENCRYPTION_KEY = "your_fernet_key_here"
 ```
 
