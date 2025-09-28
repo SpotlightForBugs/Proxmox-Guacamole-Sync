@@ -42,13 +42,6 @@
   
   <text x="10" y="195" class="terminal-text">Ready to sync VM connections!</text>
   
-  <!-- Output -->
-  <text x="10" y="50" class="terminal-symbol">●</text>
-  <text x="25" y="50" class="terminal-text">Testing API Authentication</text>
-  
-  <text x="10" y="75" class="terminal-success">✓</text>
-  <text x="25" y="75" class="terminal-text">Validating encryption key</text>
-  
   <text x="10" y="95" class="terminal-success">✓</text>
   <text x="25" y="95" class="terminal-text">Testing Guacamole authentication</text>
   
