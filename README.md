@@ -57,7 +57,8 @@ vnc_settings:"color-depth=32,encoding=tight,read-only=false,cursor=local"
 - `cursor`: local, remote
 - `read-only`: true/false (view-only mode)
 
-## Password Encryption
+<details>
+<summary><strong>🔐 Password Encryption (Optional Security Feature)</strong></summary>
 
 The tool provides automatic password encryption for enhanced security. When you configure an encryption key, the tool will automatically detect plain passwords in VM notes and offer to encrypt them.
 
@@ -101,6 +102,8 @@ user:"admin" encrypted_password:"gAAAAABhZ8X2mF1nQ7vP4sE6tA5wK3hL9mN0pQ2rT8uY7iO
 - **Transparency**: Tool automatically encrypts/decrypts as needed  
 - **Backward Compatibility**: Mixed plain/encrypted passwords supported
 - **Key Validation**: Encryption key tested on startup to prevent issues
+
+</details>
 
 ## Example Outputs
 
@@ -206,7 +209,8 @@ class Config:
     ENCRYPTION_KEY = "your_fernet_key_here"
 ```
 
-## Docker Deployment for Guacamole
+<details>
+<summary><strong>🐳 Docker Deployment for Guacamole (Infrastructure Setup)</strong></summary>
 
 If you need to deploy Guacamole itself, here are recommended Docker Compose configurations optimized for this tool:
 
@@ -282,6 +286,8 @@ pct exec 200 -- mkdir -p /opt/guacamole
 pct exec 200 -- bash -c "cd /opt/guacamole && docker compose up -d"
 ```
 
+</details>
+
 ## Usage
 
 ### Command Line Interface
@@ -348,6 +354,9 @@ $ uv run python guac_vm_manager.py delete
 - Confirmation dialog requires typing "DELETE" to proceed
 - Safe cancellation with ESC or Ctrl+C
 
+<details>
+<summary><strong>🔧 Technical Details (API Integration & Network Discovery)</strong></summary>
+
 ## API Integration
 
 ### Proxmox API
@@ -371,6 +380,8 @@ When Proxmox guest agent is unavailable or reports no IP:
 3. **MAC Matching**: Correlate ping responses with VM MAC addresses from Proxmox
 4. **IP Assignment**: Use discovered IP for connection creation
 
+</details>
+
 ## Security
 
 ### Password Protection
@@ -389,6 +400,9 @@ When Proxmox guest agent is unavailable or reports no IP:
 - **Network Issues**: Graceful degradation when IPs unavailable  
 - **Credential Parsing**: Continues processing on malformed credential lines
 - **State Recovery**: VM power state restoration after discovery operations
+
+<details>
+<summary><strong>👩‍💻 Development & Contributing</strong></summary>
 
 ## Development
 
@@ -414,10 +428,6 @@ uv run python guac_vm_manager.py test-network "MAC"  # Test network scanning
 - `NetworkScanner`: ARP table parsing, ping sweep, IP correlation
 - `WakeOnLan`: UDP broadcast for remote VM power management
 
-## License
-
-MIT License - See LICENSE file for details
-
 ## Contributing
 
 1. Fork repository
@@ -426,7 +436,10 @@ MIT License - See LICENSE file for details
 4. Ensure no hardcoded credentials in commits
 5. Submit pull request
 
-## Troubleshooting
+</details>
+
+<details>
+<summary><strong>🐛 Troubleshooting</strong></summary>
 
 ### Common Issues
 - **Authentication failures**: Verify API credentials and endpoint URLs
@@ -445,3 +458,9 @@ uv run python guac_vm_manager.py --debug-vms
 # Test network discovery
 uv run python guac_vm_manager.py test-network "vm:mac:address"
 ```
+
+</details>
+
+## License
+
+MIT License - See LICENSE file for details
