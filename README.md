@@ -58,7 +58,7 @@ vnc_settings:"color-depth=32,encoding=tight,read-only=false,cursor=local"
 - `read-only`: true/false (view-only mode)
 
 <details>
-<summary><strong>🔐 Automatic Password Encryption (Built-in Security)</strong></summary>
+<summary><strong>⚿ Automatic Password Encryption (Built-in Security)</strong></summary>
 
 The tool automatically encrypts all passwords for security. When an encryption key is configured, plain passwords in VM notes are automatically detected and encrypted during processing - no user intervention required.
 
@@ -190,7 +190,7 @@ class Config:
 ```
 
 <details>
-<summary><strong>🐳 Docker Deployment for Guacamole (Infrastructure Setup)</strong></summary>
+<summary><strong>⊞ Docker Deployment for Guacamole (Infrastructure Setup)</strong></summary>
 
 If you need to deploy Guacamole itself, here are recommended Docker Compose configurations optimized for this tool:
 
@@ -353,7 +353,7 @@ $ uv run python guac_vm_manager.py delete
 - Safe cancellation with ESC or Ctrl+C
 
 <details>
-<summary><strong>🔧 Technical Details (API Integration & Network Discovery)</strong></summary>
+<summary><strong>⚙ Technical Details (API Integration & Network Discovery)</strong></summary>
 
 ## API Integration
 
@@ -400,7 +400,7 @@ When Proxmox guest agent is unavailable or reports no IP:
 - **State Recovery**: VM power state restoration after discovery operations
 
 <details>
-<summary><strong>👩‍💻 Development & Contributing</strong></summary>
+<summary><strong>◦ Development & Contributing</strong></summary>
 
 ## Development
 
@@ -437,7 +437,7 @@ uv run python guac_vm_manager.py test-network "MAC"  # Test network scanning
 </details>
 
 <details>
-<summary><strong>🐛 Troubleshooting</strong></summary>
+<summary><strong>⚠ Troubleshooting</strong></summary>
 
 ### Common Issues
 - **Authentication failures**: Verify API credentials and endpoint URLs
