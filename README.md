@@ -73,14 +73,14 @@ The tool provides automatic password encryption for enhanced security. When you 
 **Generate encryption key:**
 ```bash
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# Output: your_generated_32_character_base64_key_here=
+# Output: b8kR9X2mF1nQ7vP4sE6tA5wK3hL9mN0pQ2rT8uY7iO1kL4sE6=
 ```
 
 **Add to config.py:**
 ```python
 class Config:
     # ... other settings ...
-    ENCRYPTION_KEY = "your_generated_32_character_base64_key_here="
+    ENCRYPTION_KEY = "b8kR9X2mF1nQ7vP4sE6tA5wK3hL9mN0pQ2rT8uY7iO1kL4sE6="
 ```
 
 ### Example Migration
@@ -92,7 +92,7 @@ user:"admin" pass:"MyPassword123" protos:"rdp,ssh";
 
 **After automatic migration:**
 ```
-user:"admin" encrypted_password:"gAAAAAB_example_encrypted_token_here_abcd123..." protos:"rdp,ssh";
+user:"admin" encrypted_password:"gAAAAABhZ8X2mF1nQ7vP4sE6tA5wK3hL9mN0pQ2rT8uY7iO1kL4sE6..." protos:"rdp,ssh";
 ```
 
 ### Benefits

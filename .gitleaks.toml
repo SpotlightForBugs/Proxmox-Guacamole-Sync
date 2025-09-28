@@ -1,0 +1,7 @@
+[allowlist]
+paths = [
+    "README.md",
+    "config_example.py"
+]
+
+description = "Allow example credentials and keys in documentation files"
