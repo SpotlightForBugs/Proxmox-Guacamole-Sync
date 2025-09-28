@@ -1,0 +1,17 @@
+#!/bin/bash
+
+echo "Testing external host functionality..."
+echo ""
+echo "1. External host input simulation:"
+echo "external"
+echo "Test Server"  
+echo "192.168.1.100"
+echo "rdp"
+echo "3389"
+echo "testuser"
+echo "testpass"
+echo "Test-Connection"
+echo "y"
+echo "n"
+echo ""
+echo "This would create a connection for an external host not managed by Proxmox"
