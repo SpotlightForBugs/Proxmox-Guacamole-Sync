@@ -1,4 +1,4 @@
-<svg width="800" height="350" xmlns="http://www.w3.org/2000/svg">
+<svg width="800" height="380" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <style>
       .terminal-bg { fill: #1e1e1e; }
@@ -16,78 +16,84 @@
   </defs>
   
   <!-- Terminal background -->
-  <rect width="800" height="350" class="terminal-bg"/>
+  <rect width="800" height="380" class="terminal-bg" rx="8"/>
+  
+  <!-- Terminal header -->
+  <rect fill="#2d2d30" width="800" height="30" rx="8 8 0 0"/>
+  <circle cx="20" cy="15" r="6" fill="#ff5f57"/>
+  <circle cx="40" cy="15" r="6" fill="#ffbd2e"/>
+  <circle cx="60" cy="15" r="6" fill="#28ca42"/>
   
   <!-- Command line -->
-  <text x="10" y="20" class="terminal-prompt">$</text>
-  <text x="25" y="20" class="terminal-text">uv run python guac_vm_manager.py list</text>
+  <text x="10" y="50" class="terminal-prompt">$</text>
+  <text x="25" y="50" class="terminal-text">uv run python guac_vm_manager.py list</text>
   
   <!-- Title -->
-  <text x="10" y="45" class="terminal-symbol">●</text>
-  <text x="25" y="45" class="terminal-text">Guacamole Connections (IPv4 only)</text>
+  <text x="10" y="75" class="terminal-symbol">●</text>
+  <text x="25" y="75" class="terminal-text">Guacamole Connections (IPv4 only)</text>
   
   <!-- Table -->
-  <rect x="10" y="60" width="760" height="200" class="terminal-border"/>
+  <rect x="10" y="90" width="760" height="200" class="terminal-border"/>
   
   <!-- Table headers -->
-  <text x="15" y="80" class="terminal-header">Connection Name</text>
-  <text x="180" y="80" class="terminal-header">Host</text>
-  <text x="280" y="80" class="terminal-header">Protocol</text>
-  <text x="340" y="80" class="terminal-header">Port</text>
-  <text x="390" y="80" class="terminal-header">PVE Source</text>
-  <text x="480" y="80" class="terminal-header">Sync Status</text>
+  <text x="15" y="110" class="terminal-header">Connection Name</text>
+  <text x="180" y="110" class="terminal-header">Host</text>
+  <text x="280" y="110" class="terminal-header">Protocol</text>
+  <text x="340" y="110" class="terminal-header">Port</text>
+  <text x="390" y="110" class="terminal-header">PVE Source</text>
+  <text x="480" y="110" class="terminal-header">Sync Status</text>
   
   <!-- Separator -->
-  <line x1="15" y1="85" x2="755" y2="85" stroke="#d4d4d4" stroke-width="1"/>
+  <line x1="15" y1="115" x2="755" y2="115" stroke="#d4d4d4" stroke-width="1"/>
   
   <!-- Table rows -->
-  <text x="15" y="105" class="terminal-text">web-srv-admin-rdp</text>
-  <text x="180" y="105" class="terminal-text">192.168.1.50</text>
-  <text x="280" y="105" class="terminal-text">rdp</text>
-  <text x="340" y="105" class="terminal-text">3389</text>
-  <text x="390" y="105" class="terminal-text">pve1</text>
-  <text x="480" y="105" class="terminal-success">✓ OK</text>
+  <text x="15" y="135" class="terminal-text">web-srv-admin-rdp</text>
+  <text x="180" y="135" class="terminal-text">192.168.1.50</text>
+  <text x="280" y="135" class="terminal-text">rdp</text>
+  <text x="340" y="135" class="terminal-text">3389</text>
+  <text x="390" y="135" class="terminal-text">pve1</text>
+  <text x="480" y="135" class="terminal-success">✓ OK</text>
   
-  <text x="15" y="125" class="terminal-text">web-srv-admin-ssh</text>
-  <text x="180" y="125" class="terminal-text">192.168.1.50</text>
-  <text x="280" y="125" class="terminal-text">ssh</text>
-  <text x="340" y="125" class="terminal-text">22</text>
-  <text x="390" y="125" class="terminal-text">pve1</text>
-  <text x="480" y="125" class="terminal-success">✓ OK</text>
+  <text x="15" y="155" class="terminal-text">web-srv-admin-ssh</text>
+  <text x="180" y="155" class="terminal-text">192.168.1.50</text>
+  <text x="280" y="155" class="terminal-text">ssh</text>
+  <text x="340" y="155" class="terminal-text">22</text>
+  <text x="390" y="155" class="terminal-text">pve1</text>
+  <text x="480" y="155" class="terminal-success">✓ OK</text>
   
-  <text x="15" y="145" class="terminal-text">db-srv-root-ssh</text>
-  <text x="180" y="145" class="terminal-text">192.168.1.51</text>
-  <text x="280" y="145" class="terminal-text">ssh</text>
-  <text x="340" y="145" class="terminal-text">2222</text>
-  <text x="390" y="145" class="terminal-text">pve2</text>
-  <text x="480" y="145" class="terminal-warning">⚠ Port diff</text>
+  <text x="15" y="175" class="terminal-text">db-srv-root-ssh</text>
+  <text x="180" y="175" class="terminal-text">192.168.1.51</text>
+  <text x="280" y="175" class="terminal-text">ssh</text>
+  <text x="340" y="175" class="terminal-text">2222</text>
+  <text x="390" y="175" class="terminal-text">pve2</text>
+  <text x="480" y="175" class="terminal-warning">⚠ Port diff</text>
   
-  <text x="15" y="165" class="terminal-text">win-dev-admin-rdp</text>
-  <text x="180" y="165" class="terminal-text">192.168.1.45</text>
-  <text x="280" y="165" class="terminal-text">rdp</text>
-  <text x="340" y="165" class="terminal-text">3390</text>
-  <text x="390" y="165" class="terminal-text">pve1</text>
-  <text x="480" y="165" class="terminal-success">✓ OK</text>
+  <text x="15" y="195" class="terminal-text">win-dev-admin-rdp</text>
+  <text x="180" y="195" class="terminal-text">192.168.1.45</text>
+  <text x="280" y="195" class="terminal-text">rdp</text>
+  <text x="340" y="195" class="terminal-text">3390</text>
+  <text x="390" y="195" class="terminal-text">pve1</text>
+  <text x="480" y="195" class="terminal-success">✓ OK</text>
   
-  <text x="15" y="185" class="terminal-text">win-dev-admin-vnc</text>
-  <text x="180" y="185" class="terminal-text">192.168.1.45</text>
-  <text x="280" y="185" class="terminal-text">vnc</text>
-  <text x="340" y="185" class="terminal-text">5900</text>
-  <text x="390" y="185" class="terminal-text">pve1</text>
-  <text x="480" y="185" class="terminal-success">✓ OK</text>
+  <text x="15" y="215" class="terminal-text">win-dev-admin-vnc</text>
+  <text x="180" y="215" class="terminal-text">192.168.1.45</text>
+  <text x="280" y="215" class="terminal-text">vnc</text>
+  <text x="340" y="215" class="terminal-text">5900</text>
+  <text x="390" y="215" class="terminal-text">pve1</text>
+  <text x="480" y="215" class="terminal-success">✓ OK</text>
   
-  <text x="15" y="205" class="terminal-text">manual-connection</text>
-  <text x="180" y="205" class="terminal-text">10.0.1.100</text>
-  <text x="280" y="205" class="terminal-text">rdp</text>
-  <text x="340" y="205" class="terminal-text">3389</text>
-  <text x="390" y="205" class="terminal-orange">(manual)</text>
-  <text x="480" y="205" class="terminal-text">N/A</text>
+  <text x="15" y="235" class="terminal-text">manual-connection</text>
+  <text x="180" y="235" class="terminal-text">10.0.1.100</text>
+  <text x="280" y="235" class="terminal-text">rdp</text>
+  <text x="340" y="235" class="terminal-text">3389</text>
+  <text x="390" y="235" class="terminal-orange">(manual)</text>
+  <text x="480" y="235" class="terminal-text">N/A</text>
   
   <!-- Summary -->
-  <text x="10" y="285" class="terminal-text">PVE Connections: </text>
-  <text x="130" y="285" class="terminal-success">5</text>
-  <text x="145" y="285" class="terminal-text"> | Manual: </text>
-  <text x="210" y="285" class="terminal-orange">1</text>
-  <text x="225" y="285" class="terminal-text"> | Total: </text>
-  <text x="270" y="285" class="terminal-text">6</text>
+  <text x="10" y="315" class="terminal-text">PVE Connections: </text>
+  <text x="130" y="315" class="terminal-success">5</text>
+  <text x="145" y="315" class="terminal-text"> | Manual: </text>
+  <text x="210" y="315" class="terminal-orange">1</text>
+  <text x="225" y="315" class="terminal-text"> | Total: </text>
+  <text x="270" y="315" class="terminal-text">6</text>
 </svg>

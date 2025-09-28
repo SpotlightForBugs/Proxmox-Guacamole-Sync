@@ -1,4 +1,4 @@
-<svg width="750" height="450" xmlns="http://www.w3.org/2000/svg">
+<svg width="750" height="480" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <style>
       .terminal-bg { fill: #1e1e1e; }
@@ -17,24 +17,30 @@
   </defs>
   
   <!-- Terminal background -->
-  <rect width="750" height="450" class="terminal-bg"/>
+  <rect width="750" height="480" class="terminal-bg" rx="8"/>
+  
+  <!-- Terminal header -->
+  <rect fill="#2d2d30" width="750" height="30" rx="8 8 0 0"/>
+  <circle cx="20" cy="15" r="6" fill="#ff5f57"/>
+  <circle cx="40" cy="15" r="6" fill="#ffbd2e"/>
+  <circle cx="60" cy="15" r="6" fill="#28ca42"/>
   
   <!-- Command line -->
-  <text x="10" y="20" class="terminal-prompt">$</text>
-  <text x="25" y="20" class="terminal-text">uv run python guac_vm_manager.py delete</text>
+  <text x="10" y="50" class="terminal-prompt">$</text>
+  <text x="25" y="50" class="terminal-text">uv run python guac_vm_manager.py delete</text>
   
   <!-- Title -->
-  <text x="10" y="45" class="terminal-symbol">●</text>
-  <text x="25" y="45" class="terminal-text">Interactive Connection &amp; Group Deletion</text>
+  <text x="10" y="75" class="terminal-symbol">●</text>
+  <text x="25" y="75" class="terminal-text">Interactive Connection &amp; Group Deletion</text>
   
   <!-- Selection box -->
   <rect x="10" y="65" width="700" height="200" class="terminal-border"/>
   <text x="15" y="85" class="terminal-header">─ Available Items ────────────────────────────────────────────────</text>
   
   <!-- Items list -->
-  <text x="15" y="105" class="terminal-text">[ ] web-srv (Group - 2 connections)</text>
-  <text x="35" y="125" class="terminal-text">├─ [ ] web-srv-admin-rdp (192.168.1.50:3389)</text>
-  <text x="35" y="145" class="terminal-text">└─ [ ] web-srv-admin-ssh (192.168.1.50:22)</text>
+  <text x="15" y="135" class="terminal-text">[ ] web-srv (Group - 2 connections)</text>
+  <text x="35" y="155" class="terminal-text">├─ [ ] web-srv-admin-rdp (192.168.1.50:3389)</text>
+  <text x="35" y="175" class="terminal-text">└─ [ ] web-srv-admin-ssh (192.168.1.50:22)</text>
   
   <!-- Selected item -->
   <rect x="15" y="155" width="680" height="16" class="terminal-selected"/>
@@ -49,11 +55,11 @@
   <text x="15" y="249" class="terminal-checkbox">[x] manual-connection (10.0.1.100:3389)</text>
   
   <!-- Instructions -->
-  <text x="10" y="285" class="terminal-text">Instructions:</text>
-  <text x="10" y="305" class="terminal-text">• Use ↑/↓ to navigate</text>
-  <text x="10" y="325" class="terminal-text">• Press SPACE to select/deselect items</text>
-  <text x="10" y="345" class="terminal-text">• Press ENTER when done selecting</text>
-  <text x="10" y="365" class="terminal-text">• ESC or Ctrl+C to cancel</text>
+  <text x="10" y="315" class="terminal-text">Instructions:</text>
+  <text x="10" y="335" class="terminal-text">• Use ↑/↓ to navigate</text>
+  <text x="10" y="355" class="terminal-text">• Press SPACE to select/deselect items</text>
+  <text x="10" y="375" class="terminal-text">• Press ENTER when done selecting</text>
+  <text x="10" y="395" class="terminal-text">• ESC or Ctrl+C to cancel</text>
   
   <text x="10" y="390" class="terminal-text">Selection: </text>
   <text x="80" y="390" class="terminal-success">2 items selected</text>
@@ -64,5 +70,5 @@
   <text x="405" y="340" class="terminal-text">Selected items:</text>
   <text x="405" y="360" class="terminal-text">• db-srv-root-ssh</text>
   <text x="405" y="380" class="terminal-text">• manual-connection</text>
-  <text x="405" y="405" class="terminal-text">Type "DELETE" to confirm:</text>
+  <text x="405" y="435" class="terminal-text">Type "DELETE" to confirm:</text>
 </svg>
