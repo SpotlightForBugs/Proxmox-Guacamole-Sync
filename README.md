@@ -206,6 +206,82 @@ class Config:
     ENCRYPTION_KEY = "your_fernet_key_here"
 ```
 
+## Docker Deployment for Guacamole
+
+If you need to deploy Guacamole itself, here are recommended Docker Compose configurations optimized for this tool:
+
+### Basic Guacamole (Recommended)
+```yaml
+version: "3.8"
+
+services:
+  guacamole:
+    image: abesnier/guacamole
+    container_name: guacamole
+    network_mode: "host"   # Essential: allows broadcast packets for Wake-on-LAN
+    volumes:
+      - postgres:/config
+    restart: unless-stopped
+
+volumes:
+  postgres:
+    driver: local
+```
+
+### With Cloudflare Tunnel (Advanced)
+```yaml
+version: "3.8"
+
+services:
+  guacamole:
+    image: abesnier/guacamole
+    container_name: guacamole
+    network_mode: "host"   # Essential: allows broadcast packets for Wake-on-LAN
+    volumes:
+      - postgres:/config
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    network_mode: "host"
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared
+
+volumes:
+  postgres:
+    driver: local
+```
+
+### Deployment Notes
+- **`network_mode: "host"`** is **critical** for Wake-on-LAN functionality
+- Use Proxmox LXC container for optimal performance and network access
+- The `abesnier/guacamole` image includes PostgreSQL and is well-maintained
+- Cloudflare tunnel provides secure external access without port forwarding
+
+### Proxmox LXC Setup
+```bash
+# Create LXC container in Proxmox
+pct create 200 ubuntu-22.04-standard_22.04-1_amd64.tar.zst \
+  --storage local-lvm \
+  --cores 2 \
+  --memory 2048 \
+  --net0 name=eth0,bridge=vmbr0,ip=dhcp \
+  --hostname guacamole-lxc
+
+# Install Docker in LXC
+pct start 200
+pct exec 200 -- bash -c "curl -fsSL https://get.docker.com | sh"
+pct exec 200 -- systemctl enable --now docker
+
+# Deploy Guacamole
+pct exec 200 -- mkdir -p /opt/guacamole
+# Copy docker-compose.yml to /opt/guacamole/
+pct exec 200 -- bash -c "cd /opt/guacamole && docker compose up -d"
+```
+
 ## Usage
 
 ### Command Line Interface
