@@ -1,0 +1,68 @@
+<svg width="750" height="450" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .terminal-bg { fill: #1e1e1e; }
+      .terminal-text { fill: #d4d4d4; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 11px; }
+      .terminal-green { fill: #4ec9b0; }
+      .terminal-yellow { fill: #dcdcaa; }
+      .terminal-blue { fill: #569cd6; }
+      .terminal-prompt { fill: #569cd6; }
+      .terminal-success { fill: #4ec9b0; }
+      .terminal-symbol { fill: #d7ba7d; }
+      .terminal-header { fill: #c586c0; }
+      .terminal-border { fill: none; stroke: #d4d4d4; stroke-width: 1; }
+      .terminal-selected { fill: #264f78; }
+      .terminal-checkbox { fill: #4ec9b0; }
+    </style>
+  </defs>
+  
+  <!-- Terminal background -->
+  <rect width="750" height="450" class="terminal-bg"/>
+  
+  <!-- Command line -->
+  <text x="10" y="20" class="terminal-prompt">$</text>
+  <text x="25" y="20" class="terminal-text">uv run python guac_vm_manager.py delete</text>
+  
+  <!-- Title -->
+  <text x="10" y="45" class="terminal-symbol">●</text>
+  <text x="25" y="45" class="terminal-text">Interactive Connection &amp; Group Deletion</text>
+  
+  <!-- Selection box -->
+  <rect x="10" y="65" width="700" height="200" class="terminal-border"/>
+  <text x="15" y="85" class="terminal-header">─ Available Items ────────────────────────────────────────────────</text>
+  
+  <!-- Items list -->
+  <text x="15" y="105" class="terminal-text">[ ] web-srv (Group - 2 connections)</text>
+  <text x="35" y="125" class="terminal-text">├─ [ ] web-srv-admin-rdp (192.168.1.50:3389)</text>
+  <text x="35" y="145" class="terminal-text">└─ [ ] web-srv-admin-ssh (192.168.1.50:22)</text>
+  
+  <!-- Selected item -->
+  <rect x="15" y="155" width="680" height="16" class="terminal-selected"/>
+  <text x="15" y="167" class="terminal-checkbox">[x] db-srv-root-ssh (192.168.1.51:2222)</text>
+  
+  <text x="15" y="187" class="terminal-text">[ ] win-dev (Group - 2 connections)</text>
+  <text x="35" y="207" class="terminal-text">├─ [ ] win-dev-admin-rdp (192.168.1.45:3390)</text>
+  <text x="35" y="227" class="terminal-text">└─ [ ] win-dev-admin-vnc (192.168.1.45:5900)</text>
+  
+  <!-- Another selected item -->
+  <rect x="15" y="237" width="680" height="16" class="terminal-selected"/>
+  <text x="15" y="249" class="terminal-checkbox">[x] manual-connection (10.0.1.100:3389)</text>
+  
+  <!-- Instructions -->
+  <text x="10" y="285" class="terminal-text">Instructions:</text>
+  <text x="10" y="305" class="terminal-text">• Use ↑/↓ to navigate</text>
+  <text x="10" y="325" class="terminal-text">• Press SPACE to select/deselect items</text>
+  <text x="10" y="345" class="terminal-text">• Press ENTER when done selecting</text>
+  <text x="10" y="365" class="terminal-text">• ESC or Ctrl+C to cancel</text>
+  
+  <text x="10" y="390" class="terminal-text">Selection: </text>
+  <text x="80" y="390" class="terminal-success">2 items selected</text>
+  
+  <!-- Confirmation box -->
+  <rect x="400" y="300" width="200" height="120" class="terminal-border"/>
+  <text x="405" y="320" class="terminal-header">─ Confirm Deletion ─</text>
+  <text x="405" y="340" class="terminal-text">Selected items:</text>
+  <text x="405" y="360" class="terminal-text">• db-srv-root-ssh</text>
+  <text x="405" y="380" class="terminal-text">• manual-connection</text>
+  <text x="405" y="405" class="terminal-text">Type "DELETE" to confirm:</text>
+</svg>

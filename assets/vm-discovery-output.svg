@@ -1,0 +1,72 @@
+<svg width="700" height="300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .terminal-bg { fill: #1e1e1e; }
+      .terminal-text { fill: #d4d4d4; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 12px; }
+      .terminal-green { fill: #4ec9b0; }
+      .terminal-yellow { fill: #dcdcaa; }
+      .terminal-prompt { fill: #569cd6; }
+      .terminal-success { fill: #4ec9b0; }
+      .terminal-symbol { fill: #d7ba7d; }
+      .terminal-header { fill: #c586c0; }
+      .terminal-border { fill: none; stroke: #d4d4d4; stroke-width: 1; }
+    </style>
+  </defs>
+  
+  <!-- Terminal background -->
+  <rect width="700" height="300" class="terminal-bg"/>
+  
+  <!-- Command line -->
+  <text x="10" y="20" class="terminal-prompt">$</text>
+  <text x="25" y="20" class="terminal-text">uv run python guac_vm_manager.py add</text>
+  
+  <!-- Title -->
+  <text x="10" y="45" class="terminal-symbol">●</text>
+  <text x="25" y="45" class="terminal-text">Discovered VMs from Proxmox</text>
+  
+  <!-- Table header -->
+  <rect x="10" y="60" width="650" height="120" class="terminal-border"/>
+  
+  <!-- Table headers -->
+  <text x="15" y="80" class="terminal-header">VM ID</text>
+  <text x="80" y="80" class="terminal-header">Name</text>
+  <text x="150" y="80" class="terminal-header">Status</text>
+  <text x="230" y="80" class="terminal-header">Memory (MB)</text>
+  <text x="340" y="80" class="terminal-header">Node</text>
+  
+  <!-- Separator line -->
+  <line x1="15" y1="85" x2="645" y2="85" stroke="#d4d4d4" stroke-width="1"/>
+  
+  <!-- Table rows -->
+  <text x="15" y="105" class="terminal-text">100</text>
+  <text x="80" y="105" class="terminal-text">web-srv</text>
+  <text x="150" y="105" class="terminal-success">running</text>
+  <text x="230" y="105" class="terminal-text">4096</text>
+  <text x="340" y="105" class="terminal-text">pve1</text>
+  
+  <text x="15" y="125" class="terminal-text">101</text>
+  <text x="80" y="125" class="terminal-text">db-srv</text>
+  <text x="150" y="125" class="terminal-yellow">stopped</text>
+  <text x="230" y="125" class="terminal-text">8192</text>
+  <text x="340" y="125" class="terminal-text">pve2</text>
+  
+  <text x="15" y="145" class="terminal-text">102</text>
+  <text x="80" y="145" class="terminal-text">win-dev</text>
+  <text x="150" y="145" class="terminal-success">running</text>
+  <text x="230" y="145" class="terminal-text">2048</text>
+  <text x="340" y="145" class="terminal-text">pve1</text>
+  
+  <!-- Selection prompt -->
+  <text x="10" y="205" class="terminal-text">Select VM to add connections for: </text>
+  <text x="280" y="205" class="terminal-yellow">102</text>
+  
+  <!-- Processing output -->
+  <text x="10" y="230" class="terminal-symbol">●</text>
+  <text x="25" y="230" class="terminal-text">Processing VM: win-dev (ID: 102)</text>
+  
+  <text x="10" y="250" class="terminal-symbol">●</text>
+  <text x="25" y="250" class="terminal-text">Discovered IP: 192.168.1.45</text>
+  
+  <text x="10" y="270" class="terminal-success">✓</text>
+  <text x="25" y="270" class="terminal-text">Created connections: win-dev-admin-rdp, win-dev-admin-vnc</text>
+</svg>

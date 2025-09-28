@@ -1,0 +1,38 @@
+<svg width="600" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .terminal-bg { fill: #1e1e1e; }
+      .terminal-text { fill: #d4d4d4; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 13px; }
+      .terminal-green { fill: #4ec9b0; }
+      .terminal-yellow { fill: #dcdcaa; }
+      .terminal-prompt { fill: #569cd6; }
+      .terminal-success { fill: #4ec9b0; }
+      .terminal-symbol { fill: #d7ba7d; }
+    </style>
+  </defs>
+  
+  <!-- Terminal background -->
+  <rect width="600" height="200" class="terminal-bg"/>
+  
+  <!-- Command line -->
+  <text x="10" y="25" class="terminal-prompt">$</text>
+  <text x="25" y="25" class="terminal-text">uv run python guac_vm_manager.py test-auth</text>
+  
+  <!-- Output -->
+  <text x="10" y="50" class="terminal-symbol">●</text>
+  <text x="25" y="50" class="terminal-text">Testing API Authentication</text>
+  
+  <text x="10" y="75" class="terminal-success">✓</text>
+  <text x="25" y="75" class="terminal-text">Validating encryption key</text>
+  
+  <text x="10" y="95" class="terminal-success">✓</text>
+  <text x="25" y="95" class="terminal-text">Testing Guacamole authentication</text>
+  
+  <text x="10" y="115" class="terminal-success">✓</text>
+  <text x="25" y="115" class="terminal-text">Testing Proxmox authentication</text>
+  
+  <!-- Status box -->
+  <rect x="10" y="135" width="250" height="50" fill="none" stroke="#4ec9b0" stroke-width="1"/>
+  <text x="15" y="150" class="terminal-success">─ Authentication Status ─</text>
+  <text x="15" y="170" class="terminal-success">✓ All systems ready</text>
+</svg>

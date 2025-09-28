@@ -108,76 +108,22 @@ user:"admin" encrypted_password:"gAAAAABhZ8X2mF1nQ7vP4sE6tA5wK3hL9mN0pQ2rT8uY7iO
 ```bash
 $ uv run python guac_vm_manager.py test-auth
 ```
-```
-● Testing API Authentication
 
-✓ Validating encryption key
-✓ Testing Guacamole authentication  
-✓ Testing Proxmox authentication
-
-┌─ Authentication Status ─┐
-│ ✓ All systems ready     │
-└─────────────────────────┘
-```
+![Authentication Test Output](assets/test-auth-output.svg)
 
 ### VM Discovery and Connection Creation
 ```bash
 $ uv run python guac_vm_manager.py add
 ```
-```
-● Discovered VMs from Proxmox
 
-┌─────────────┬──────────┬────────────┬───────────────┬─────────────────┐
-│ VM ID       │ Name     │ Status     │ Memory (MB)   │ Node            │
-├─────────────┼──────────┼────────────┼───────────────┼─────────────────┤
-│ 100         │ web-srv  │ running    │ 4096          │ pve1            │
-│ 101         │ db-srv   │ stopped    │ 8192          │ pve2            │
-│ 102         │ win-dev  │ running    │ 2048          │ pve1            │
-└─────────────┴──────────┴────────────┴───────────────┴─────────────────┘
-
-Select VM to add connections for: 102
-
-● Processing VM: win-dev (ID: 102)
-● Starting stopped VM for IP discovery...
-● Waiting for VM network initialization (30s)...
-● Discovered IP: 192.168.1.45
-
-Found credentials in VM notes:
-user:"admin" pass:"WinPass123" protos:"rdp,vnc" rdp_port:"3390";
-
-Creating connections:
-✓ win-dev-admin-rdp (192.168.1.45:3390)
-✓ win-dev-admin-vnc (192.168.1.45:5900)
-✓ Created connection group: win-dev
-
-● Restoring VM to original state (stopped)
-
-┌─ Summary ─┐
-│ ✓ 2 connections created │
-│ ✓ 1 group created       │
-└─────────────────────────┘
-```
+![VM Discovery Output](assets/vm-discovery-output.svg)
 
 ### Connection Listing with Sync Status
 ```bash
 $ uv run python guac_vm_manager.py list
 ```
-```
-● Guacamole Connections (IPv4 only)
 
-┌────────────────────┬─────────────────┬──────────┬──────┬──────────────┬─────────────┐
-│ Connection Name    │ Host            │ Protocol │ Port │ PVE Source   │ Sync Status │
-├────────────────────┼─────────────────┼──────────┼──────┼──────────────┼─────────────┤
-│ web-srv-admin-rdp  │ 192.168.1.50    │ rdp      │ 3389 │ pve1         │ ✓ OK        │
-│ web-srv-admin-ssh  │ 192.168.1.50    │ ssh      │ 22   │ pve1         │ ✓ OK        │
-│ db-srv-root-ssh    │ 192.168.1.51    │ ssh      │ 2222 │ pve2         │ ⚠ Port diff │
-│ win-dev-admin-rdp  │ 192.168.1.45    │ rdp      │ 3390 │ pve1         │ ✓ OK        │
-│ win-dev-admin-vnc  │ 192.168.1.45    │ vnc      │ 5900 │ pve1         │ ✓ OK        │
-│ manual-connection  │ 10.0.1.100      │ rdp      │ 3389 │ (manual)     │ N/A         │
-└────────────────────┴─────────────────┴──────────┴──────┴──────────────┴─────────────┘
-
-PVE Connections: 5 | Manual: 1 | Total: 6
-```
+![Connection List Output](assets/connection-list-output.svg)
 
 ### Auto-Processing All VMs
 ```bash
@@ -353,49 +299,14 @@ uv run python guac_vm_manager.py list
 ```bash
 $ uv run python guac_vm_manager.py delete
 ```
-```
-● Interactive Connection & Group Deletion
 
-┌─ Available Items ────────────────────────────────────────────────┐
-│ [ ] web-srv (Group - 2 connections)                             │
-│     ├─ [ ] web-srv-admin-rdp (192.168.1.50:3389)               │
-│     └─ [ ] web-srv-admin-ssh (192.168.1.50:22)                 │
-│ [ ] db-srv-root-ssh (192.168.1.51:2222)                        │
-│ [ ] win-dev (Group - 2 connections)                             │
-│     ├─ [ ] win-dev-admin-rdp (192.168.1.45:3390)               │
-│     └─ [ ] win-dev-admin-vnc (192.168.1.45:5900)               │
-│ [ ] manual-connection (10.0.1.100:3389)                         │
-└──────────────────────────────────────────────────────────────────┘
+![Interactive Delete Output](assets/interactive-delete-output.svg)
 
-Instructions:
-• Use ↑/↓ to navigate
-• Press SPACE to select/deselect items
-• Press ENTER when done selecting
-• ESC or Ctrl+C to cancel
-
-Selection: 2 items selected
-
-┌─ Confirm Deletion ─┐
-│ Selected items:    │
-│ • db-srv-root-ssh  │
-│ • manual-connection│
-│                    │
-│ Type "DELETE" to   │
-│ confirm permanent  │
-│ removal:           │
-└────────────────────┘
-
-Confirmation: DELETE
-
-● Deleting selected items...
-✓ Deleted connection: db-srv-root-ssh
-✓ Deleted connection: manual-connection
-
-┌─ Deletion Summary ─┐
-│ Connections: 2     │
-│ Groups: 0          │
-└────────────────────┘
-```
+**Features:**
+- Visual selection with checkboxes (`[x]` for selected, `[ ]` for unselected)
+- Navigate with arrow keys, select/deselect with spacebar
+- Confirmation dialog requires typing "DELETE" to proceed
+- Safe cancellation with ESC or Ctrl+C
 
 ## API Integration
 
