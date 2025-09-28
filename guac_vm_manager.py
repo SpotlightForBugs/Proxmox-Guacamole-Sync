@@ -49,7 +49,10 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 console = Console()
 app = typer.Typer(
     name="guac-vm-manager",
-    help=" Guacamole VM Manager - Sync Proxmox VMs with Apache Guacamole",
+    help="🔗 Guacamole VM Manager - Sync Proxmox VMs with Apache Guacamole\n\n"
+         "Automatically creates remote desktop connections (RDP/VNC/SSH) in Apache Guacamole\n"
+         "by parsing VM credentials from Proxmox VM notes. Features IPv4-only networking,\n"
+         "interactive connection management, and Wake-on-LAN support.",
     rich_markup_mode="rich",
     add_completion=False
 )
@@ -223,8 +226,9 @@ def run_onboarding():
                 except Exception as e:
                     console.print(f"[red]Proxmox auth error: {e}[/red]")
             elif s == "Explaining VM notes format":
-                console.print("\nStructured credential line example:")
-                console.print('  user:"admin" pass:"P@ss" protos:"rdp,ssh" rdp_port:"3390" confName:"{vmname}-{user}-{proto}";')
+                console.print("\nStructured credential line examples:")
+                console.print('  user:"admin" pass:"P@ss" protos:"rdp,vnc,ssh" rdp_port:"3390" vnc_port:"5901" confName:"{vmname}-{user}-{proto}";')
+                console.print('  user:"viewer" pass:"view123" protos:"vnc" vnc_settings:"color-depth=16,encoding=raw,read-only=true";')
                 console.print("Lines end with semicolons; unrecognized free-form lines are preserved but ignored for parsing.")
             elif s == "Next steps":
                 console.print("\nNext steps:")
@@ -506,15 +510,30 @@ class GuacamoleAPI:
                 
                 connection_data["parameters"].update(wol_params)
         else:  # VNC
+            # Default VNC parameters with enhanced options
+            vnc_params = {
+                "hostname": hostname,
+                "port": str(port),
+                "password": password,
+                # Display and quality settings
+                "color-depth": "32",
+                "swap-red-blue": "false",
+                "cursor": "local",
+                "encoding": "tight",
+                # Clipboard and input settings
+                "enable-sftp": "false",
+                "disable-copy": "false",
+                "disable-paste": "false",
+                # Performance optimizations
+                "autoretry": "5",
+                "read-only": "false"
+            }
+            
             connection_data = {
                 "name": name,
                 "protocol": "vnc",
                 "parentIdentifier": parent_identifier or "ROOT",
-                "parameters": {
-                    "hostname": hostname,
-                    "port": str(port),
-                    "password": password
-                },
+                "parameters": vnc_params,
                 "attributes": {
                     "max-connections": "2",
                     "max-connections-per-user": "1"
@@ -595,6 +614,32 @@ class GuacamoleAPI:
                     continue
                 else:
                     # Try alternative approach - some Guacamole versions need different method
+                    continue
+            except requests.exceptions.RequestException as e:
+                continue
+
+        return False
+
+    def delete_connection_group(self, identifier: str) -> bool:
+        """Delete a connection group by identifier"""
+        if not self.auth_token and not self.authenticate():
+            return False
+
+        # Try different delete endpoints for connection groups
+        delete_endpoints = []
+        
+        # Build endpoints for deletion 
+        for base_path in ["/api/session/data/postgresql", "/api/session/data/mysql", "/guacamole/api/session/data/postgresql", "/guacamole/api/session/data/mysql"]:
+            delete_endpoints.append(f"{self.config.GUAC_BASE_URL}{base_path}/connectionGroups/{identifier}?token={self.auth_token}")
+
+        for endpoint in delete_endpoints:
+            try:
+                response = self.session.delete(endpoint)
+                if response.status_code in (200, 204):
+                    return True
+                elif response.status_code == 404:
+                    continue
+                else:
                     continue
             except requests.exceptions.RequestException as e:
                 continue
@@ -731,21 +776,45 @@ class GuacamoleAPI:
     
     def create_vnc_connection(self, name: str, hostname: str, password: str = "", 
                             port: int = 5900, enable_wol: bool = True, mac_address: str = "",
-                            parent_identifier: Optional[str] = None, wol_settings: Optional[Dict[str, str]] = None) -> Optional[str]:
+                            parent_identifier: Optional[str] = None, wol_settings: Optional[Dict[str, str]] = None,
+                            vnc_settings: Optional[Dict[str, str]] = None) -> Optional[str]:
         """Create VNC connection in Guacamole"""
         if not self.auth_token:
             if not self.authenticate():
                 return None
         
+        # Default VNC parameters with enhanced options
+        vnc_params = {
+            "hostname": hostname,
+            "port": str(port),
+            "password": password,
+            # Display and quality settings
+            "color-depth": "32",
+            "swap-red-blue": "false",
+            "cursor": "local",
+            "encoding": "tight",
+            # Clipboard and input settings
+            "enable-sftp": "false",
+            "disable-copy": "false",
+            "disable-paste": "false",
+            # Performance optimizations
+            "autoretry": "5",
+            "read-only": "false"
+        }
+        
+        # Apply VNC setting overrides if provided
+        if vnc_settings:
+            for key, value in vnc_settings.items():
+                if key.startswith('enable-') or key.startswith('disable-'):
+                    vnc_params[key] = "true" if value.lower() in ['true', '1', 'yes'] else "false"
+                else:
+                    vnc_params[key] = value
+        
         connection_data = {
             "name": name,
             "protocol": "vnc",
             "parentIdentifier": parent_identifier or "ROOT",
-            "parameters": {
-                "hostname": hostname,
-                "port": str(port),
-                "password": password
-            },
+            "parameters": vnc_params,
             "attributes": {
                 "max-connections": "2",
                 "max-connections-per-user": "1"
@@ -1067,7 +1136,7 @@ class ProxmoxAPI:
         hostname = socket.gethostname().split('.')[0]  # Local hostname
         
         # New flexible format: Parameters can be in any order, multiple protocols per user
-        # Example: user:"admin" pass:"pass123" protos:"rdp,ssh" rdp_port:"3389" ssh_port:"22" confName:"template" wolDisabled:"true";
+        # Example: user:"admin" pass:"pass123" protos:"rdp,vnc,ssh" rdp_port:"3389" vnc_port:"5901" ssh_port:"22" confName:"template" wolDisabled:"true";
         # Find lines ending with semicolon (credential lines)
         credential_lines = re.findall(r'[^;]*;', notes, re.MULTILINE)
         
@@ -1172,6 +1241,15 @@ class ProxmoxAPI:
                             key, value = setting.split('=', 1)
                             rdp_overrides[key.strip()] = value.strip()
                 
+                # Parse VNC settings if provided (support both new and old names)
+                vnc_overrides = {}
+                vnc_settings = params.get('vnc_settings', params.get('vncSettings', ''))
+                if vnc_settings and protocol == 'vnc':
+                    for setting in vnc_settings.split(','):
+                        if '=' in setting:
+                            key, value = setting.split('=', 1)
+                            vnc_overrides[key.strip()] = value.strip()
+                
                 # Parse WoL settings if provided (support both new and old names)
                 wol_overrides = {}
                 wol_settings = params.get('wol_settings', params.get('wolSettings', ''))
@@ -1229,6 +1307,7 @@ class ProxmoxAPI:
                     'connection_name': connection_name,
                     'port': port,
                     'rdp_settings': rdp_overrides,
+                    'vnc_settings': vnc_overrides,
                     'wol_settings': wol_overrides,
                     'wol_disabled': wol_disabled
                 })
@@ -1475,6 +1554,11 @@ class ProxmoxAPI:
                 name = iface.get('name', 'unknown')
                 mac = iface.get('hardware-address', 'no-mac')
                 ip_count = len(iface.get('ip-addresses', []))
+                
+                # Skip loopback interfaces
+                if 'loopback' in name.lower() or 'pseudo-interface' in name.lower():
+                    continue
+                    
                 print(f" Guest agent interface: {name} (MAC: {mac}, {ip_count} IPs)")
                 valid_interfaces.append(iface)
                 
@@ -1565,10 +1649,13 @@ class ProxmoxAPI:
             ips = []
             for addr in iface.get('ip-addresses', []):
                 ip_address = addr.get('ip-address')
-                # Skip link-local and loopback
+                # Skip link-local, loopback, and IPv6 addresses
                 if not ip_address:
                     continue
                 if ip_address.startswith('127.') or ip_address.startswith('::1'):
+                    continue
+                # Skip all IPv6 addresses
+                if '::' in ip_address or (':' in ip_address and '.' not in ip_address):
                     continue
                 ips.append({
                     'address': ip_address,
@@ -2380,8 +2467,11 @@ def interactive_add_vm(auto_approve: bool = False, start_external: bool = False)
                 ip_addr = addr.get('ip-address') or addr.get('address')
                 if not ip_addr:
                     continue
-                # Skip loopback and link-local addresses
+                # Skip loopback, link-local, and IPv6 addresses  
                 if ip_addr.startswith('127.') or ip_addr.startswith('169.254.') or ip_addr.startswith('::1') or ip_addr.startswith('fe80:'):
+                    continue
+                # Skip all IPv6 addresses
+                if '::' in ip_addr or (':' in ip_addr and '.' not in ip_addr):
                     continue
                     
                 label = ip_addr
@@ -2997,25 +3087,54 @@ def interactive_add_vm(auto_approve: bool = False, start_external: bool = False)
                 safe_host = selected_hostname or ""
                 identifier = guac_api.create_vnc_connection(
                     name=conn['name'], hostname=safe_host, password=conn['password'], port=conn['port'],
-                        status[name] = ("done", "OK")
-                    else:
-                        status[name] = ("error", err or "failed")
-                    created_connections.append((name, identifier))
-                    progress.advance(task_id)
+                    enable_wol=conn_enable_wol, mac_address=selected_mac or "", parent_identifier=parent_identifier,
+                    wol_settings=conn.get('wol_settings'), vnc_settings=conn.get('vnc_settings')
+                )
+            
+            return conn['name'], identifier, None
+        except Exception as e:
+            return conn['name'], None, str(e)
+
+    status = {}  # connection name -> (state, msg)
+    futures = []
+    
+    if disable_threads or len(connections_to_create) == 1:
+        # Sequential mode for debugging or single connection
+        print("Creating connections sequentially...")
+        for conn in connections_to_create:
+            name, identifier, err = create_one(conn)
+            if err:
+                status[name] = ("error", err.split('\n')[0][:60])
             else:
-                progress.update(task_id, description=f"Creating with {max_workers} workers...")
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    for conn in connections_to_create:
-                        status[conn['name']] = ("queued", "")
-                        futures.append(executor.submit(create_one, conn))
-                    for fut in as_completed(futures):
-                        name, identifier, err = fut.result()
-                        if err:
-                            status[name] = ("error", err.split('\n')[0][:60])
-                        else:
-                            status[name] = ("done", "OK")
+                status[name] = ("done", "OK")
+                created_connections.append((name, identifier))
+    else:
+        # Parallel mode with progress display
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task_id = progress.add_task("Creating connections...", total=len(connections_to_create))
+            
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks
+                for conn in connections_to_create:
+                    status[conn['name']] = ("queued", "")
+                    futures.append(executor.submit(create_one, conn))
+                
+                # Collect results as they complete
+                for fut in as_completed(futures):
+                    name, identifier, err = fut.result()
+                    if err:
+                        status[name] = ("error", err.split('\n')[0][:60])
+                    else:
+                        status[name] = ("done", "OK")
                         created_connections.append((name, identifier))
-                        progress.advance(task_id)
+                    progress.advance(task_id)
             # Final refresh
             pass
 
@@ -3243,6 +3362,174 @@ def list_connections():
     console.print(table)
     return True
 
+def delete_connections_interactive():
+    """Interactive deletion mode for connections and groups"""
+    config = Config()
+    guac_api = GuacamoleAPI(config)
+    
+    if not guac_api.authenticate():
+        console.print(Panel(" Failed to authenticate with Guacamole", border_style="red"))
+        return False
+    
+    # Get connections and groups
+    connections = guac_api.get_connections()
+    groups = guac_api.get_connection_groups()
+    
+    if not connections and not groups:
+        console.print(Panel(" No connections or groups found to delete.", border_style="yellow"))
+        return True
+    
+    # Prepare items for selection
+    items = []
+    
+    # Add connections
+    for conn_id, conn in connections.items():
+        name = conn.get('name', 'N/A')
+        protocol = conn.get('protocol', 'N/A')
+        items.append({
+            'type': 'connection',
+            'id': conn_id,
+            'name': name,
+            'display': f"[Connection] {name} ({protocol.upper()})",
+            'selected': False
+        })
+    
+    # Add connection groups
+    for group_id, group in groups.items():
+        name = group.get('name', 'N/A')
+        items.append({
+            'type': 'group',
+            'id': group_id,
+            'name': name,
+            'display': f"[Group] {name}",
+            'selected': False
+        })
+    
+    if not items:
+        console.print(Panel(" No items available for deletion.", border_style="yellow"))
+        return True
+    
+    console.print(Panel.fit(" Delete Connections & Groups", border_style="red", title="Delete Mode"))
+    console.print("\n[yellow]Use SPACE to select/deselect items, ENTER to confirm deletion, ESC or Ctrl+C to cancel[/yellow]\n")
+    
+    current_index = 0
+    
+    try:
+        while True:
+            # Clear screen and show selection
+            console.clear()
+            console.print(Panel.fit(" Delete Connections & Groups", border_style="red", title="Delete Mode"))
+            console.print("\n[yellow]Use SPACE to select/deselect, ENTER to delete selected, ESC/Ctrl+C to cancel[/yellow]\n")
+            
+            # Show items with selection state
+            for i, item in enumerate(items):
+                prefix = ">" if i == current_index else " "
+                checkbox = "[x]" if item['selected'] else "[ ]"
+                style = "bold red" if item['selected'] else "white"
+                highlight = "on blue" if i == current_index else ""
+                
+                console.print(f"{prefix} {checkbox} [{style} {highlight}]{item['display']}[/{style} {highlight}]")
+            
+            selected_count = sum(1 for item in items if item['selected'])
+            if selected_count > 0:
+                console.print(f"\n[red]{selected_count} item(s) selected for deletion[/red]")
+            
+            # Get user input
+            import sys
+            import tty
+            import termios
+            
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            
+            try:
+                tty.setraw(sys.stdin.fileno())
+                ch = sys.stdin.read(1)
+                
+                if ch == '\x1b':  # ESC sequence
+                    ch2 = sys.stdin.read(1)
+                    if ch2 == '[':
+                        ch3 = sys.stdin.read(1)
+                        if ch3 == 'A':  # Up arrow
+                            current_index = max(0, current_index - 1)
+                        elif ch3 == 'B':  # Down arrow
+                            current_index = min(len(items) - 1, current_index + 1)
+                    else:
+                        # ESC pressed, cancel
+                        console.print("\n[yellow]Delete cancelled.[/yellow]")
+                        return True
+                elif ch == ' ':  # Space - toggle selection
+                    items[current_index]['selected'] = not items[current_index]['selected']
+                elif ch == '\r' or ch == '\n':  # Enter - confirm deletion
+                    selected_items = [item for item in items if item['selected']]
+                    if selected_items:
+                        break
+                    else:
+                        console.print("\n[yellow]No items selected for deletion.[/yellow]")
+                        input("Press Enter to continue...")
+                elif ch == '\x03':  # Ctrl+C
+                    console.print("\n[yellow]Delete cancelled.[/yellow]")
+                    return True
+                        
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Delete cancelled.[/yellow]")
+        return True
+    
+    # Confirm deletion
+    selected_items = [item for item in items if item['selected']]
+    if not selected_items:
+        console.print("\n[yellow]No items selected for deletion.[/yellow]")
+        return True
+    
+    console.clear()
+    console.print("\n[red bold]⚠ CONFIRM DELETION ⚠[/red bold]")
+    console.print("\nThe following items will be permanently deleted:")
+    
+    for item in selected_items:
+        console.print(f"  • {item['display']}")
+    
+    confirm = input(f"\nType 'DELETE' to confirm deletion of {len(selected_items)} item(s): ").strip()
+    
+    if confirm != "DELETE":
+        console.print("\n[yellow]Deletion cancelled - confirmation text did not match.[/yellow]")
+        return True
+    
+    # Perform deletions
+    console.print("\n[red]Deleting selected items...[/red]")
+    
+    success_count = 0
+    error_count = 0
+    
+    for item in selected_items:
+        try:
+            if item['type'] == 'connection':
+                if guac_api.delete_connection(item['id']):
+                    console.print(f"[green]✓ Deleted connection: {item['name']}[/green]")
+                    success_count += 1
+                else:
+                    console.print(f"[red]✗ Failed to delete connection: {item['name']}[/red]")
+                    error_count += 1
+            elif item['type'] == 'group':
+                if guac_api.delete_connection_group(item['id']):
+                    console.print(f"[green]✓ Deleted group: {item['name']}[/green]")
+                    success_count += 1
+                else:
+                    console.print(f"[red]✗ Failed to delete group: {item['name']}[/red]")
+                    error_count += 1
+        except Exception as e:
+            console.print(f"[red]✗ Error deleting {item['name']}: {e}[/red]")
+            error_count += 1
+    
+    console.print(f"\n[green]Successfully deleted: {success_count}[/green]")
+    if error_count > 0:
+        console.print(f"[red]Failed deletions: {error_count}[/red]")
+    
+    input("\nPress Enter to continue...")
+    return True
+
 def process_single_vm_auto(config, proxmox_api, guac_api, node_name, vm, credentials, force=False):
     """Process a single VM with automatic configuration"""
     vm_id = vm['vmid']
@@ -3280,12 +3567,16 @@ def process_single_vm_auto(config, proxmox_api, guac_api, node_name, vm, credent
             if mac:
                 vm_macs.append(mac)
             
-            # Find IP address
+            # Find IP address - IPv4 ONLY (no IPv6)
             for addr in interface.get('ip_addresses', []):
                 ip_addr = addr.get('ip-address') or addr.get('address')
-                if ip_addr and not ip_addr.startswith('127.') and '::' not in ip_addr:
+                if ip_addr and not ip_addr.startswith('127.') and not ip_addr.startswith('::1'):
+                    # Reject IPv6 addresses completely - only accept IPv4
+                    if '::' in ip_addr or (':' in ip_addr and '.' not in ip_addr):
+                        continue  # Skip IPv6 addresses
                     vm_ip = ip_addr
                     break
+            
             if vm_ip:
                 break
         
@@ -3306,12 +3597,14 @@ def process_single_vm_auto(config, proxmox_api, guac_api, node_name, vm, credent
                 proxmox_api.stop_vm(node_name, vm_id)
             return False
         
-        # Create connection group for the VM
-        group_name = vm_name
-        console.print(f"   [cyan] Creating connection group: {group_name}[/cyan]")
-        parent_identifier = guac_api.create_connection_group(group_name)
-        if parent_identifier is None:
-            console.print("   [yellow]  Failed to create connection group. Connections will be created at root level.[/yellow]")
+        # Create connection group for the VM only if there are multiple connections
+        parent_identifier = None
+        if len(credentials) > 1:
+            group_name = vm_name
+            console.print(f"   [cyan] Creating connection group: {group_name}[/cyan]")
+            parent_identifier = guac_api.create_connection_group(group_name)
+            if parent_identifier is None:
+                console.print("   [yellow]  Failed to create connection group. Connections will be created at root level.[/yellow]")
         
         # Use the first available MAC for WoL
         primary_mac = vm_macs[0] if vm_macs else None
@@ -3346,6 +3639,8 @@ def process_single_vm_auto(config, proxmox_api, guac_api, node_name, vm, credent
                     wol_settings=wol_settings if wol_settings else None
                 )
             elif protocol == 'vnc':
+                # Get VNC-specific settings from credentials
+                vnc_settings = cred.get('vnc_settings', {})
                 identifier = guac_api.create_vnc_connection(
                     name=connection_name,
                     hostname=vm_ip,
@@ -3354,7 +3649,8 @@ def process_single_vm_auto(config, proxmox_api, guac_api, node_name, vm, credent
                     parent_identifier=parent_identifier,
                     enable_wol=(not wol_disabled and primary_mac is not None),
                     mac_address=primary_mac or "",
-                    wol_settings=wol_settings if wol_settings else None
+                    wol_settings=wol_settings if wol_settings else None,
+                    vnc_settings=vnc_settings if vnc_settings else None
                 )
             elif protocol == 'ssh':
                 identifier = guac_api.create_ssh_connection(
@@ -3538,7 +3834,7 @@ def auto_process_all_vms(force=False):
             print(f"    Processing...")
             
             # Animate processing
-            process_chars = ""
+            process_chars = "|/-\\"
             for j in range(10):  # Short animation
                 print(f"\r   {process_chars[j % len(process_chars)]} Processing...", end="", flush=True)
                 time.sleep(0.1)
@@ -3718,6 +4014,15 @@ def auto_process(
         console.print(f"[red]Error in auto-processing: {e}[/red]")
         raise typer.Exit(1)
 
+@app.command("delete")
+def delete_connections_cmd():
+    """ Interactive connection and group deletion mode"""
+    try:
+        delete_connections_interactive()
+    except Exception as e:
+        console.print(f"[red]Error in delete mode: {e}[/red]")
+        raise typer.Exit(1)
+
 @app.command("interactive")
 def interactive_menu():
     """ Interactive menu mode"""
@@ -3732,10 +4037,11 @@ def interactive_menu():
             console.print("2.  Automatically add all configured Proxmox VMs")
             console.print("3.  Add different (external) machine to Guacamole")
             console.print("4.  List Guacamole connections")
-            console.print("5.  Show CLI options")
+            console.print("5.  Delete connections & groups (interactive)")
+            console.print("6.  Show CLI options")
             console.print("0.  Exit")
 
-            choice = typer.prompt("\nEnter choice (0-5)").strip()
+            choice = typer.prompt("\nEnter choice (0-6)").strip()
 
             if choice == "1":
                 interactive_add_vm()
@@ -3746,12 +4052,15 @@ def interactive_menu():
             elif choice == "4":
                 list_connections()
             elif choice == "5":
+                delete_connections_interactive()
+            elif choice == "6":
                 console.print(Panel.fit(" CLI Commands ", border_style="magenta"))
                 cmds = [
                     "interactive  (interactive menu)",
                     "add          (manually add one Proxmox VM)",
                     "auto         (auto-process all VMs with credentials)",
                     "list         (list existing connections)",
+                    "delete       (interactive deletion of connections/groups)",
                     "test-auth    (test API authentication)",
                     "test-network <MAC>",
                     "add-external (add non-Proxmox host)",
@@ -3763,7 +4072,7 @@ def interactive_menu():
                 console.print(Panel(" Goodbye!", border_style="green"))
                 break
             else:
-                console.print("[red]Invalid choice. Please enter 1-4.[/red]")
+                console.print("[red]Invalid choice. Please enter 0-6.[/red]")
     
     except KeyboardInterrupt:
         console.print("\n[yellow]Exiting...[/yellow]")

@@ -12,8 +12,9 @@ Core
 * Automatic encrypted password handling (Fernet) + migration of plain pass -> encrypted
 
 Discovery & Network
+* **IPv4-only networking** - Completely filters out IPv6 addresses for clean connections
+* **Loopback interface filtering** - Ignores unnecessary loopback pseudo-interfaces  
 * Guest agent IP + fallback ARP/ping sweep
-* Prefer IPv4 automatically (ordering + auto-select)
 * Wake-on-LAN (built-in, no deps)
 * Auto-start stopped VM for discovery then restore prior state
 
@@ -24,6 +25,7 @@ Synchronization
 * Optional external host onboarding (not in Proxmox)
 
 User Experience
+* **Interactive deletion mode** - Select connections/groups with spacebar, confirm with "DELETE"
 * Progress indicators for VM fetch, updates, connection creation
 * Early credential apply / ignore / edit prompt
 * Inline credential editor (username, protocol, port, name)
@@ -38,16 +40,22 @@ Safety & Consistency
 * Idempotent re-runs (no duplicate connections)
 
 CLI
-* add / auto / list / test-auth / test-network / interactive / add-external
+* add / auto / list / **delete** / test-auth / test-network / interactive / add-external
 * Auto-skip interactive when non-TTY / tests / CI
+* Rich help text with comprehensive feature descriptions
 
 ## VM Notes Credential Line
 
 ```
-user:"admin" pass:"Password" protos:"rdp,ssh" rdp_port:"3390" confName:"{vmname}-{user}-{proto}";
+user:"admin" pass:"Password" protos:"rdp,vnc,ssh" rdp_port:"3390" vnc_port:"5901" confName:"{vmname}-{user}-{proto}";
+user:"viewer" pass:"readonly" protos:"vnc" vnc_settings:"read-only=true,color-depth=16,encoding=tight";
 ```
 
 Multiple lines allowed. Parameters may appear in any order. Use `encrypted_password:` instead of `pass:` for encrypted values.
+
+### VNC-Specific Settings
+- `vnc_settings:"key=value,key2=value2"` - Protocol-specific configuration
+- Common VNC options: `color-depth` (8/16/24/32), `encoding` (tight/raw/hextile), `read-only` (true/false), `cursor` (local/remote)
 
 Key tokens (aliases accepted):
 * user / username
@@ -61,10 +69,20 @@ Key tokens (aliases accepted):
 
 ## Minimal Usage
 
-```
+```bash
+# Interactive VM selection and setup
 uv run python guac_vm_manager.py add
+
+# Auto-process all VMs with credentials
 uv run python guac_vm_manager.py auto
+
+# List all connections with clean IPv4-only display
 uv run python guac_vm_manager.py list
+
+# Interactive delete mode (select with spacebar)
+uv run python guac_vm_manager.py delete
+
+# Add external (non-Proxmox) hosts
 uv run python guac_vm_manager.py add-external
 ```
 
@@ -339,6 +357,24 @@ user:"admin" encrypted_password:"gAAAAABhZ..." protos:"rdp";
 
 The tool can automatically encrypt existing plain passwords in VM notes. When it finds plain passwords, it will offer to encrypt them for you.
 
+## Network Configuration
+
+### IPv4-Only Mode
+The tool now operates in **IPv4-only mode** for clean, reliable connections:
+
+- **Automatic IPv4 Detection**: Prioritizes and uses only IPv4 addresses from VM network interfaces
+- **IPv6 Filtering**: Completely ignores IPv6 addresses to prevent connection issues
+- **Clean Connection Display**: Lists show clean IPv4 addresses like `192.168.1.100` instead of long IPv6 strings
+- **Loopback Filtering**: Automatically ignores loopback pseudo-interfaces to reduce noise
+
+### Benefits:
+- **Simplified Network Management**: No confusion between IPv4/IPv6 addresses  
+- **Reliable Connections**: Avoids IPv6 connectivity issues in mixed environments
+- **Clean Output**: Connection lists are readable and professional
+- **Faster Discovery**: Focuses scanning on usable IPv4 addresses only
+
+This ensures all Guacamole connections use standard IPv4 addressing for maximum compatibility.
+
 ## Interactive Examples  
 
 ### Multi-Protocol User with Custom Ports
@@ -413,27 +449,33 @@ pass:"pass123" ssh_port:"2222" protos:"rdp,ssh" user:"admin";
 
 ### Modern CLI Interface
 
-The tool now features a modern Typer-based CLI with rich output and clean authentication:
+The tool features a modern Typer-based CLI with rich output, IPv4-only networking, and interactive management:
 
 ```bash
 # Interactive mode - pick a VM and set it up
 uv run python guac_vm_manager.py add
 
-# List connections with PVE source tracking and hostname resolution
+# List connections with PVE source tracking and clean IPv4 display
 uv run python guac_vm_manager.py list
 
-# Test authentication with beautiful, clean output
+# Interactive deletion - select multiple items with spacebar
+uv run python guac_vm_manager.py delete
+
+# Test authentication with beautiful, clean output  
 uv run python guac_vm_manager.py test-auth
 
 # Interactive menu (default when no command given)
 uv run python guac_vm_manager.py
 ```
 
-### Other Commands
+### All Commands
 
 ```bash
-# List existing connections with PVE source tracking
+# List existing connections with PVE source tracking (IPv4 only)
 uv run python guac_vm_manager.py list
+
+# Interactive deletion mode - select with spacebar, confirm with "DELETE"
+uv run python guac_vm_manager.py delete
 
 # Test API authentication (clean, beautiful output)
 uv run python guac_vm_manager.py test-auth
@@ -447,22 +489,46 @@ uv run python guac_vm_manager.py debug-vms
 # Auto-process all VMs with credentials in notes
 uv run python guac_vm_manager.py auto
 
-# Force recreate all connections
+# Force recreate all connections (IPv4 filtering applied)
 uv run python guac_vm_manager.py auto --force
 
 # Interactive menu mode (default when no command specified)
 uv run python guac_vm_manager.py interactive
 ```
 
+## Interactive Delete Mode
+
+The new delete command provides a safe, interactive way to remove connections and groups:
+
+```bash
+uv run python guac_vm_manager.py delete
+```
+
+### Features:
+- **Visual Selection**: Navigate with arrow keys, select/deselect with spacebar
+- **Multi-Selection**: Select multiple connections and groups at once  
+- **Clear Indication**: Selected items show `[x]` checkbox and count
+- **Safety Confirmation**: Must type "DELETE" to confirm permanent removal
+- **Mixed Deletion**: Delete connections and groups together in one operation
+- **Cancel Anytime**: ESC or Ctrl+C to abort safely
+
+### Usage:
+1. Run `uv run python guac_vm_manager.py delete`
+2. Use ↑/↓ arrow keys to navigate
+3. Press SPACE to select/deselect items (shows `[x]` when selected)
+4. Press ENTER when done selecting
+5. Type "DELETE" to confirm permanent deletion
+6. Or ESC/Ctrl+C to cancel
+
 ## How it works
 
 1. **Pick a VM** - Shows you all VMs from Proxmox with their status
-2. **Find the IP** - Scans your network to find where the VM actually is  
+2. **Find the IP** - Automatically detects IPv4 addresses only (no IPv6 clutter)
 3. **Get credentials** - Reads them from VM notes (much better than hardcoded passwords)
 4. **Create connections** - Sets up RDP/VNC in Guacamole with Wake-on-LAN
-5. **Group them** - Multiple users per VM get organized in a folder
+5. **Group them** - Multiple users per VM get organized in a folder (single connections stay ungrouped)
 
-If the VM is stopped and not on the network, it can start it for you and wait for it to boot up.
+The tool now filters out loopback interfaces and uses IPv4-only networking for clean, reliable connections. If the VM is stopped, it can start it for you and wait for it to boot up.
 
 ## Examples
 
