@@ -141,30 +141,8 @@ $ uv run python guac_vm_manager.py auto
 ```bash
 $ uv run python guac_vm_manager.py test-network "52:54:00:12:34:56"
 ```
-```
-● Testing network discovery for MAC: 52:54:00:12:34:56
 
-Scanning ARP table... 
-├─ Found 23 entries
-├─ No direct match for target MAC
-
-Performing ping sweep on 192.168.1.0/24...
-├─ Scanning 254 addresses
-├─ Found 12 responsive hosts
-├─ Cross-referencing with ARP table...
-└─ No correlation found
-
-Performing ping sweep on 10.0.1.0/24...  
-├─ Scanning 254 addresses
-├─ Found 8 responsive hosts
-├─ Cross-referencing with ARP table...
-└─ ✓ Found match: 10.0.1.45
-
-┌─ Discovery Result ─┐
-│ MAC: 52:54:00:12:34:56  │
-│ IP:  10.0.1.45          │
-└─────────────────────────┘
-```
+![Network Discovery Output](assets/network-discovery-output.svg)
 
 ## Installation
 
@@ -336,6 +314,24 @@ uv run python guac_vm_manager.py auto
 # Skips VMs without credentials or with existing up-to-date connections
 ```
 
+**Force Recreation:**
+```bash
+uv run python guac_vm_manager.py auto --force
+```
+![Force Auto-Process Output](assets/auto-force-output.svg)
+
+**External Host Addition:**
+```bash
+uv run python guac_vm_manager.py add-external
+```
+![Add External Output](assets/add-external-output.svg)
+
+**Interactive Menu:**
+```bash
+uv run python guac_vm_manager.py
+```
+![Interactive Menu Output](assets/interactive-menu-output.svg)
+
 **Maintenance:**
 ```bash
 uv run python guac_vm_manager.py list
@@ -453,13 +449,20 @@ uv run python guac_vm_manager.py test-network "MAC"  # Test network scanning
 ```bash
 # Test both API connections
 uv run python guac_vm_manager.py test-auth
+```
+![Authentication Test Output](assets/test-auth-output.svg)
 
+```bash
 # Show detailed VM information
 uv run python guac_vm_manager.py --debug-vms
+```
+![Debug VMs Output](assets/debug-vms-output.svg)
 
+```bash
 # Test network discovery
 uv run python guac_vm_manager.py test-network "vm:mac:address"
 ```
+![Network Discovery Output](assets/network-discovery-output.svg)
 
 </details>
 

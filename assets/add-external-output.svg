@@ -1,0 +1,65 @@
+<svg width="800" height="450" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .terminal-bg { fill: #1e1e1e; }
+      .terminal-text { font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 14px; }
+      .command { fill: #dcdcaa; }
+      .output { fill: #cccccc; }
+      .success { fill: #4ec9b0; }
+      .info { fill: #9cdcfe; }
+      .warning { fill: #ffcc02; }
+      .prompt { fill: #569cd6; }
+      .input { fill: #ce9178; }
+      .bullet { fill: #569cd6; }
+    </style>
+  </defs>
+  
+  <!-- Terminal background -->
+  <rect class="terminal-bg" width="800" height="450" rx="8"/>
+  
+  <!-- Terminal header -->
+  <rect fill="#2d2d30" width="800" height="30" rx="8 8 0 0"/>
+  <circle cx="20" cy="15" r="6" fill="#ff5f57"/>
+  <circle cx="40" cy="15" r="6" fill="#ffbd2e"/>
+  <circle cx="60" cy="15" r="6" fill="#28ca42"/>
+  
+  <!-- Command prompt -->
+  <text x="20" y="60" class="terminal-text command">$ uv run python guac_vm_manager.py add-external</text>
+  
+  <!-- Output lines -->
+  <text x="20" y="85" class="terminal-text bullet">●</text>
+  <text x="40" y="85" class="terminal-text info">Add External Host Connection</text>
+  
+  <text x="20" y="110" class="terminal-text output"></text>
+  <text x="20" y="125" class="terminal-text prompt">Enter hostname or IP address:</text>
+  <text x="340" y="125" class="terminal-text input">192.168.1.200</text>
+  
+  <text x="20" y="150" class="terminal-text prompt">Enter connection name:</text>
+  <text x="240" y="150" class="terminal-text input">fileserver-admin</text>
+  
+  <text x="20" y="175" class="terminal-text prompt">Select protocol (rdp/vnc/ssh):</text>
+  <text x="300" y="175" class="terminal-text input">ssh</text>
+  
+  <text x="20" y="200" class="terminal-text prompt">Enter username:</text>
+  <text x="180" y="200" class="terminal-text input">admin</text>
+  
+  <text x="20" y="225" class="terminal-text prompt">Enter password:</text>
+  <text x="180" y="225" class="terminal-text input">••••••••</text>
+  
+  <text x="20" y="250" class="terminal-text prompt">Enter port (default 22):</text>
+  <text x="260" y="250" class="terminal-text input">2222</text>
+  
+  <text x="20" y="275" class="terminal-text prompt">Enable Wake-on-LAN? (y/N):</text>
+  <text x="300" y="275" class="terminal-text input">y</text>
+  
+  <text x="20" y="300" class="terminal-text prompt">Enter MAC address for WoL:</text>
+  <text x="280" y="300" class="terminal-text input">00:1b:21:ab:cd:ef</text>
+  
+  <text x="20" y="325" class="terminal-text output"></text>
+  <text x="20" y="340" class="terminal-text info">Creating external connection...</text>
+  <text x="20" y="360" class="terminal-text success">✓ Connection "fileserver-admin" created successfully</text>
+  <text x="20" y="380" class="terminal-text info">├─ Protocol: SSH (port 2222)</text>
+  <text x="20" y="395" class="terminal-text info">├─ Target: 192.168.1.200</text>
+  <text x="20" y="410" class="terminal-text info">├─ Username: admin</text>
+  <text x="20" y="425" class="terminal-text info">└─ Wake-on-LAN: enabled (00:1b:21:ab:cd:ef)</text>
+</svg>

@@ -1,0 +1,53 @@
+<svg width="850" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .terminal-bg { fill: #1e1e1e; }
+      .terminal-text { font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace; font-size: 14px; }
+      .command { fill: #dcdcaa; }
+      .output { fill: #cccccc; }
+      .success { fill: #4ec9b0; }
+      .info { fill: #9cdcfe; }
+      .warning { fill: #ffcc02; }
+      .bullet { fill: #569cd6; }
+      .progress { fill: #c586c0; }
+    </style>
+  </defs>
+  
+  <!-- Terminal background -->
+  <rect class="terminal-bg" width="850" height="400" rx="8"/>
+  
+  <!-- Terminal header -->
+  <rect fill="#2d2d30" width="850" height="30" rx="8 8 0 0"/>
+  <circle cx="20" cy="15" r="6" fill="#ff5f57"/>
+  <circle cx="40" cy="15" r="6" fill="#ffbd2e"/>
+  <circle cx="60" cy="15" r="6" fill="#28ca42"/>
+  
+  <!-- Command prompt -->
+  <text x="20" y="60" class="terminal-text command">$ uv run python guac_vm_manager.py auto --force</text>
+  
+  <!-- Output lines -->
+  <text x="20" y="85" class="terminal-text bullet">●</text>
+  <text x="40" y="85" class="terminal-text info">Force Recreating All VM Connections</text>
+  
+  <text x="20" y="110" class="terminal-text output"></text>
+  <text x="20" y="125" class="terminal-text warning">⚠ Force mode enabled - will recreate ALL connections</text>
+  
+  <text x="20" y="150" class="terminal-text progress">Processing VMs...</text>
+  <text x="200" y="150" class="terminal-text info">████████████████████ 100%</text>
+  
+  <text x="20" y="175" class="terminal-text success">✓ Deleted existing connection: ubuntu-server-admin-rdp</text>
+  <text x="20" y="190" class="terminal-text success">✓ Created connection: ubuntu-server-admin-rdp (RDP)</text>
+  <text x="20" y="205" class="terminal-text success">✓ Created connection: ubuntu-server-admin-ssh (SSH)</text>
+  
+  <text x="20" y="230" class="terminal-text success">✓ Deleted existing connection: windows-10-user-rdp</text>
+  <text x="20" y="245" class="terminal-text success">✓ Created connection: windows-10-user-rdp (RDP)</text>
+  <text x="20" y="260" class="terminal-text success">✓ Created connection: windows-10-user-vnc (VNC)</text>
+  
+  <text x="20" y="285" class="terminal-text success">✓ Created connection: fileserver-root-ssh (SSH)</text>
+  
+  <text x="20" y="310" class="terminal-text output"></text>
+  <text x="20" y="325" class="terminal-text info">═══ Force Recreation Summary ═══</text>
+  <text x="20" y="345" class="terminal-text success">✓ 6 connections recreated</text>
+  <text x="20" y="360" class="terminal-text success">✓ 3 VMs processed</text>
+  <text x="20" y="375" class="terminal-text info">All existing connections were deleted and recreated with current VM data.</text>
+</svg>
