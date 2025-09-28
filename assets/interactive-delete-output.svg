@@ -43,16 +43,16 @@
   <text x="35" y="175" class="terminal-text">└─ [ ] web-srv-admin-ssh (192.168.1.50:22)</text>
   
   <!-- Selected item -->
-  <rect x="15" y="155" width="680" height="16" class="terminal-selected"/>
-  <text x="15" y="167" class="terminal-checkbox">[x] db-srv-root-ssh (192.168.1.51:2222)</text>
+  <rect x="15" y="190" width="680" height="16" class="terminal-selected"/>
+  <text x="15" y="202" class="terminal-checkbox">[x] db-srv-root-ssh (192.168.1.51:2222)</text>
   
-  <text x="15" y="187" class="terminal-text">[ ] win-dev (Group - 2 connections)</text>
-  <text x="35" y="207" class="terminal-text">├─ [ ] win-dev-admin-rdp (192.168.1.45:3390)</text>
-  <text x="35" y="227" class="terminal-text">└─ [ ] win-dev-admin-vnc (192.168.1.45:5900)</text>
+  <text x="15" y="220" class="terminal-text">[ ] win-dev (Group - 2 connections)</text>
+  <text x="35" y="240" class="terminal-text">├─ [ ] win-dev-admin-rdp (192.168.1.45:3390)</text>
+  <text x="35" y="260" class="terminal-text">└─ [ ] win-dev-admin-vnc (192.168.1.45:5900)</text>
   
   <!-- Another selected item -->
-  <rect x="15" y="237" width="680" height="16" class="terminal-selected"/>
-  <text x="15" y="249" class="terminal-checkbox">[x] manual-connection (10.0.1.100:3389)</text>
+  <rect x="15" y="270" width="680" height="16" class="terminal-selected"/>
+  <text x="15" y="282" class="terminal-checkbox">[x] manual-connection (10.0.1.100:3389)</text>
   
   <!-- Instructions -->
   <text x="10" y="315" class="terminal-text">Instructions:</text>
@@ -61,8 +61,8 @@
   <text x="10" y="375" class="terminal-text">• Press ENTER when done selecting</text>
   <text x="10" y="395" class="terminal-text">• ESC or Ctrl+C to cancel</text>
   
-  <text x="10" y="415" class="terminal-text">Selection: </text>
-  <text x="80" y="415" class="terminal-success">2 items selected</text>
+  <text x="10" y="420" class="terminal-text">Selection: </text>
+  <text x="80" y="420" class="terminal-success">2 items selected</text>
   
   <!-- Confirmation box -->
   <rect x="400" y="440" width="200" height="120" class="terminal-border"/>
