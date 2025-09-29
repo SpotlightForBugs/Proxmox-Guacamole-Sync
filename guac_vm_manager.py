@@ -2042,7 +2042,7 @@ class ProxmoxAPI:
                     f"[green]Updated VM {vmid} notes with encrypted passwords[/green]"
                 )
                 return True
-            elif response.status_code == 405:
+            if response.status_code == 405:
                 # Some proxies disallow PUT - try POST with override
                 try:
                     console.print(
@@ -3353,7 +3353,7 @@ def interactive_add_vm(
 
         if selection == "0":
             return False
-        elif selection.isdigit():
+        if selection.isdigit():
             index = int(selection) - 1
             if 0 <= index < len(vms):
                 selected_vm = vms[index]
@@ -5922,11 +5922,10 @@ def edit_connections_interactive():
 
         if action_choice == "e":
             return edit_single_connection(guac_api, selected_item)
-        elif action_choice == "d":
+        if action_choice == "d":
             return delete_single_item(guac_api, selected_item)
-        else:
-            console.print("[yellow]Action cancelled.[/yellow]")
-            return True
+        console.print("[yellow]Action cancelled.[/yellow]")
+        return True
 
     elif selected_item["type"] == "group":
         action_choice = (
@@ -5943,11 +5942,10 @@ def edit_connections_interactive():
 
         if action_choice == "r":
             return rename_single_group(guac_api, selected_item)
-        elif action_choice == "d":
+        if action_choice == "d":
             return delete_single_item(guac_api, selected_item)
-        else:
-            console.print("[yellow]Action cancelled.[/yellow]")
-            return True
+        console.print("[yellow]Action cancelled.[/yellow]")
+        return True
 
     return True
 
@@ -6771,9 +6769,8 @@ def edit_connection_direct(
             f"[green]✓ Successfully updated connection: {connection_name}[/green]"
         )
         return True
-    else:
-        console.print(f"[red]✗ Failed to update connection: {connection_name}[/red]")
-        return False
+    console.print(f"[red]✗ Failed to update connection: {connection_name}[/red]")
+    return False
 
 
 def delete_connections_direct(
