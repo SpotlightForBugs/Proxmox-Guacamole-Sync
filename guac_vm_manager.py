@@ -4138,10 +4138,6 @@ def interactive_add_vm(
                 f"  {i+1}. {cred['connection_name']} ({cred['username']}, {protocol}:{port_value})"
             )
 
-        if not auto_approve and parsed_credentials:
-            # Old confirm replaced by earlier apply prompt; keep backward compat if needed
-            pass
-
     # Manual credential entry if no parsed credentials or user declined
     if not parsed_credentials:
         if auto_approve:
