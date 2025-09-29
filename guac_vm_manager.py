@@ -19,7 +19,6 @@ if len(sys.argv) > 1 and sys.argv[1] in help_options:
 import requests
 import os
 import socket
-import struct
 import json
 import urllib3
 from urllib.parse import urljoin
@@ -834,12 +833,11 @@ class GuacamoleAPI:
                             return True
                         # Silent failure, try next endpoint
                         continue
-                    elif response.status_code == 404:
+                    if response.status_code == 404:
                         # Expected for installations without /guacamole prefix
                         continue
-                    else:
-                        # Silent failure, try next endpoint
-                        continue
+                    # Silent failure, try next endpoint
+                    continue
 
                 except requests.exceptions.RequestException:
                     # Silent failure, try next endpoint
@@ -887,12 +885,11 @@ class GuacamoleAPI:
                                 return True
                             # Silent failure, try next endpoint
                             continue
-                        elif response.status_code == 404:
+                        if response.status_code == 404:
                             # Expected for installations without /guacamole prefix
                             continue
-                        else:
-                            # Silent failure, try next endpoint
-                            continue
+                        # Silent failure, try next endpoint
+                        continue
 
                     except requests.exceptions.RequestException:
                         # Silent failure, try next endpoint
@@ -954,10 +951,9 @@ class GuacamoleAPI:
                     return response.json()
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to get connections from {connections_url}: {response.status_code}"
-                    )
+                print(
+                    f"Failed to get connections from {connections_url}: {response.status_code}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Request failed for {connections_url}: {e}")
                 continue
@@ -1012,10 +1008,9 @@ class GuacamoleAPI:
                     return connection_info
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to get connection details from {detail_url}: {response.status_code}"
-                    )
+                print(
+                    f"Failed to get connection details from {detail_url}: {response.status_code}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Request failed: {e}")
                 continue
@@ -1043,10 +1038,9 @@ class GuacamoleAPI:
                     return response.json()
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to get connection groups from {groups_url}: {response.status_code}"
-                    )
+                print(
+                    f"Failed to get connection groups from {groups_url}: {response.status_code}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Request failed for {groups_url}: {e}")
                 continue
@@ -1304,9 +1298,8 @@ class GuacamoleAPI:
                     return True
                 if response.status_code == 404:
                     continue
-                else:
-                    # Try alternative approach - some Guacamole versions need different method
-                    continue
+                # Try alternative approach - some Guacamole versions need different method
+                continue
             except requests.exceptions.RequestException as e:
                 continue
 
@@ -1338,8 +1331,7 @@ class GuacamoleAPI:
                     return True
                 if response.status_code == 404:
                     continue
-                else:
-                    continue
+                continue
             except requests.exceptions.RequestException as e:
                 continue
 
@@ -1394,8 +1386,7 @@ class GuacamoleAPI:
                     return True
                 if response.status_code == 404:
                     continue
-                else:
-                    continue
+                continue
             except requests.exceptions.RequestException as e:
                 continue
 
@@ -1468,8 +1459,7 @@ class GuacamoleAPI:
                     return None
                 if response.status_code == 404:
                     continue
-                else:
-                    print(f"Failed to create group: {response.status_code}")
+                print(f"Failed to create group: {response.status_code}")
             except requests.exceptions.RequestException as e:
                 print(f"Request failed for group creation: {e}")
                 continue
@@ -1656,10 +1646,9 @@ class GuacamoleAPI:
                     return identifier
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to create RDP connection via {endpoint}: {response.status_code} {response.text}"
-                    )
+                print(
+                    f"Failed to create RDP connection via {endpoint}: {response.status_code} {response.text}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Failed to create RDP connection via {endpoint}: {e}")
                 if hasattr(e, "response") and e.response is not None:
@@ -1770,10 +1759,9 @@ class GuacamoleAPI:
                     return identifier
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to create VNC connection via {endpoint}: {response.status_code} {response.text}"
-                    )
+                print(
+                    f"Failed to create VNC connection via {endpoint}: {response.status_code} {response.text}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Failed to create VNC connection via {endpoint}: {e}")
                 if hasattr(e, "response") and e.response is not None:
@@ -1867,10 +1855,9 @@ class GuacamoleAPI:
                     return identifier
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to create SSH connection via {endpoint}: {response.status_code} {response.text}"
-                    )
+                print(
+                    f"Failed to create SSH connection via {endpoint}: {response.status_code} {response.text}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Failed to create SSH connection via {endpoint}: {e}")
                 if hasattr(e, "response") and e.response is not None:
@@ -2055,7 +2042,7 @@ class ProxmoxAPI:
                     f"[green]Updated VM {vmid} notes with encrypted passwords[/green]"
                 )
                 return True
-            elif response.status_code == 405:
+            if response.status_code == 405:
                 # Some proxies disallow PUT - try POST with override
                 try:
                     console.print(
@@ -3366,7 +3353,7 @@ def interactive_add_vm(
 
         if selection == "0":
             return False
-        elif selection.isdigit():
+        if selection.isdigit():
             index = int(selection) - 1
             if 0 <= index < len(vms):
                 selected_vm = vms[index]
@@ -3635,9 +3622,8 @@ def interactive_add_vm(
                         except Exception as e:
                             print(f"Edit error: {e}")
                         continue
-                    else:
-                        print("Please choose a / i / e")
-                        continue
+                    print("Please choose a / i / e")
+                    continue
         else:
             console.print(
                 "\n[yellow]Warning: No credentials found in VM notes[/yellow]"
@@ -3899,9 +3885,8 @@ def interactive_add_vm(
                     if manual_ip:
                         selected_hostname = manual_ip
                         break
-                    else:
-                        print("Hostname cannot be empty")
-                        continue
+                    print("Hostname cannot be empty")
+                    continue
                 if ip_choice.isdigit():
                     idx = int(ip_choice) - 1
                     if 0 <= idx < len(ip_options):
@@ -3994,9 +3979,8 @@ def interactive_add_vm(
                 if WakeOnLan.validate_mac_address(manual_mac):
                     selected_mac = manual_mac
                     break
-                else:
-                    print("Invalid MAC address format")
-                    continue
+                print("Invalid MAC address format")
+                continue
             if mac_choice.isdigit():
                 idx = int(mac_choice) - 1
                 if 0 <= idx < len(mac_candidates):
@@ -4604,12 +4588,6 @@ def interactive_add_vm(
     max_workers = min(
         8, max(1, len(connections_to_create))
     )  # cap to keep UI responsive
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from rich.live import Live
-    from rich.progress import (
-        BarColumn,
-        TimeElapsedColumn,
-    )
 
     def create_one(conn: Dict) -> Tuple[str, Optional[str], Optional[str]]:
         """Worker: create a single connection; returns (name, identifier, error)."""
@@ -5378,7 +5356,7 @@ def analyze_connections_for_grouping(connection_details):
         name_lower = conn["name"].lower()
         hostname_lower = conn["params"].get("hostname", "").lower()
 
-        for keyword in environment_groups.keys():
+        for keyword in environment_groups:
             if keyword in name_lower or keyword in hostname_lower:
                 environment_groups[keyword].append(conn)
                 break
@@ -5714,11 +5692,8 @@ def delete_connections_interactive():
                     selected_items = [item for item in items if item["selected"]]
                     if selected_items:
                         break
-                    else:
-                        console.print(
-                            "\n[yellow]No items selected for deletion.[/yellow]"
-                        )
-                        input("Press Enter to continue...")
+                    console.print("\n[yellow]No items selected for deletion.[/yellow]")
+                    input("Press Enter to continue...")
                 elif ch == "\x03":  # Ctrl+C
                     console.print("\n[yellow]Delete cancelled.[/yellow]")
                     return True
@@ -5947,11 +5922,10 @@ def edit_connections_interactive():
 
         if action_choice == "e":
             return edit_single_connection(guac_api, selected_item)
-        elif action_choice == "d":
+        if action_choice == "d":
             return delete_single_item(guac_api, selected_item)
-        else:
-            console.print("[yellow]Action cancelled.[/yellow]")
-            return True
+        console.print("[yellow]Action cancelled.[/yellow]")
+        return True
 
     elif selected_item["type"] == "group":
         action_choice = (
@@ -5968,11 +5942,10 @@ def edit_connections_interactive():
 
         if action_choice == "r":
             return rename_single_group(guac_api, selected_item)
-        elif action_choice == "d":
+        if action_choice == "d":
             return delete_single_item(guac_api, selected_item)
-        else:
-            console.print("[yellow]Action cancelled.[/yellow]")
-            return True
+        console.print("[yellow]Action cancelled.[/yellow]")
+        return True
 
     return True
 
@@ -6079,13 +6052,11 @@ def edit_single_connection(guac_api, item):
     try:
         connections = guac_api.get_connections()
         existing_hostnames = list(
-            set(
-                [
-                    conn.get("parameters", {}).get("hostname", "")
-                    for conn in connections.values()
-                    if conn.get("parameters", {}).get("hostname")
-                ]
-            )
+            {
+                conn.get("parameters", {}).get("hostname", "")
+                for conn in connections.values()
+                if conn.get("parameters", {}).get("hostname")
+            }
         )
         if pve_hostname:
             existing_hostnames.append(pve_hostname)
@@ -6796,9 +6767,8 @@ def edit_connection_direct(
             f"[green]✓ Successfully updated connection: {connection_name}[/green]"
         )
         return True
-    else:
-        console.print(f"[red]✗ Failed to update connection: {connection_name}[/red]")
-        return False
+    console.print(f"[red]✗ Failed to update connection: {connection_name}[/red]")
+    return False
 
 
 def delete_connections_direct(
@@ -7709,8 +7679,6 @@ def delete_connections_cmd(
 @app.command("interactive")
 def interactive_menu():
     """Interactive menu mode"""
-    from rich.columns import Columns
-    from rich.align import Align
 
     if (
         os.environ.get("PYTEST_CURRENT_TEST")
