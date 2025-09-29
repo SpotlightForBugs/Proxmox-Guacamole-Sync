@@ -4370,7 +4370,9 @@ def interactive_add_vm(
                         tbl.add_row(conn["name"], st, res)
                     return tbl
 
-                with Live(build_table(), console=console, refresh_per_second=20), progress:
+                with Live(
+                    build_table(), console=console, refresh_per_second=20
+                ), progress:
                     if disable_threads or len(updates_needed) == 1:
                         progress.update(
                             task_id, description="Updating (sequential mode)..."
@@ -4391,9 +4393,7 @@ def interactive_add_vm(
                             task_id,
                             description=f"Updating with {max_workers} workers...",
                         )
-                        with ThreadPoolExecutor(
-                            max_workers=max_workers
-                        ) as executor:
+                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
                             future_map = {
                                 executor.submit(do_update, entry): entry
                                 for entry in updates_needed
