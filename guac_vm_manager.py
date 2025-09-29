@@ -651,7 +651,7 @@ class GuacamoleAPI:
                 )
 
             # Update GUAC_WORKING_DATA_SOURCE
-            if f"GUAC_WORKING_DATA_SOURCE =" not in content:
+            if "GUAC_WORKING_DATA_SOURCE =" not in content:
                 # Add it after GUAC_WORKING_BASE_PATH
                 content = content.replace(
                     'GUAC_WORKING_BASE_PATH = "/api"# "/api" or "/guacamole/api"',
@@ -667,7 +667,7 @@ class GuacamoleAPI:
                 # Update the comment to indicate it was auto-corrected
                 content = re.sub(
                     rf'(GUAC_DATA_SOURCE\s*=\s*"{self._working_data_source}")(\s*#.*)?',
-                    rf"\1  # Auto-corrected to match server",
+                    "\1  # Auto-corrected to match server",
                     content,
                 )
 
@@ -676,7 +676,7 @@ class GuacamoleAPI:
                 f.write(content)
 
             console.print(
-                f"[green]✓ Saved discovered endpoints to config for faster future runs[/green]"
+                "[green]✓ Saved discovered endpoints to config for faster future runs[/green]"
             )
             self._config_saved = True  # Mark that we've saved this session
 
@@ -2901,10 +2901,10 @@ class NetworkScanner:
                 return entry
 
         print(f" MAC address {target_mac} not found on local network")
-        print(f"   This could mean:")
-        print(f"   - VM is stopped or not responding to network traffic")
-        print(f"   - VM is on a different network segment")
-        print(f"   - MAC address in Proxmox config doesn't match actual VM")
+        print("   This could mean:")
+        print("   - VM is stopped or not responding to network traffic")
+        print("   - VM is on a different network segment")
+        print("   - MAC address in Proxmox config doesn't match actual VM")
         return None
 
     @staticmethod
@@ -6128,7 +6128,7 @@ def edit_single_connection(guac_api, item):
         new_password = console.input("Password (optional): ").strip()
 
     # Show confirmation
-    console.print(f"\n[bold]Review changes:[/bold]")
+    console.print("\n[bold]Review changes:[/bold]")
     console.print(f"Name: {current_name} -> [cyan]{new_name}[/cyan]")
     console.print(f"Hostname: {current_hostname} -> [cyan]{new_hostname}[/cyan]")
     console.print(f"Port: {current_port} -> [cyan]{new_port}[/cyan]")
@@ -6137,7 +6137,7 @@ def edit_single_connection(guac_api, item):
         f"Password: {'Updated' if new_password != current_password else 'Unchanged'}"
     )
 
-    confirm = console.input(f"\nSave changes? (y/N): ").strip().lower()
+    confirm = console.input("\nSave changes? (y/N): ").strip().lower()
 
     if confirm == "y":
         try:
@@ -6204,11 +6204,11 @@ def rename_single_group(guac_api, item):
 
 def delete_single_item(guac_api, item):
     """Delete a single connection or group"""
-    console.print(f"\n[red bold]⚠ CONFIRM DELETION ⚠[/red bold]")
+    console.print("\n[red bold]⚠ CONFIRM DELETION ⚠[/red bold]")
     console.print(f"\nThe following {item['type']} will be permanently deleted:")
     console.print(f"  • {item['display']}")
 
-    confirm = console.input(f"\nType 'DELETE' to confirm deletion: ").strip()
+    confirm = console.input("\nType 'DELETE' to confirm deletion: ").strip()
 
     if confirm != "DELETE":
         console.print(
@@ -6833,7 +6833,7 @@ def delete_connections_direct(
         for item in items_to_delete:
             console.print(f"  • {item['type'].title()}: {item['name']}")
 
-        confirm = input(f"\nType 'DELETE' to confirm: ").strip()
+        confirm = input("\nType 'DELETE' to confirm: ").strip()
         if confirm != "DELETE":
             console.print("[yellow]Deletion cancelled[/yellow]")
             return False
@@ -6930,7 +6930,7 @@ def edit_connections_by_pattern(
         for conn_id, conn in matching_connections:
             console.print(f"  • {conn.get('name', 'N/A')}")
 
-        console.print(f"\n[bold]Changes to apply:[/bold]")
+        console.print("\n[bold]Changes to apply:[/bold]")
         if new_hostname is not None:
             console.print(f"  Hostname: -> {new_hostname}")
         if new_username is not None:
@@ -7083,7 +7083,7 @@ def delete_connections_by_pattern(
         for item in items_to_delete:
             console.print(f"  • {item['type'].title()}: {item['name']}")
 
-        confirm = input(f"\nType 'DELETE' to confirm: ").strip()
+        confirm = input("\nType 'DELETE' to confirm: ").strip()
         if confirm != "DELETE":
             console.print("[yellow]Deletion cancelled[/yellow]")
             return False
@@ -7843,31 +7843,31 @@ def install_completion_cmd(
 
     # Provide installation instructions based on shell
     if shell == "zsh":
-        console.print(f"\n[green]Add this line to your ~/.zshrc:[/green]")
+        console.print("\n[green]Add this line to your ~/.zshrc:[/green]")
         console.print(
             f"[dim]eval \"$(_{base_name.upper().replace('-', '_')}_COMPLETE=zsh_source uv run python {script_path})\"[/dim]"
         )
-        console.print(f"\n[yellow]Or for this session only, run:[/yellow]")
+        console.print("\n[yellow]Or for this session only, run:[/yellow]")
         console.print(
             f"[dim]eval \"$(_{base_name.upper().replace('-', '_')}_COMPLETE=zsh_source uv run python {script_path})\"[/dim]"
         )
 
     elif shell == "bash":
-        console.print(f"\n[green]Add this line to your ~/.bashrc:[/green]")
+        console.print("\n[green]Add this line to your ~/.bashrc:[/green]")
         console.print(
             f"[dim]eval \"$(_{base_name.upper().replace('-', '_')}_COMPLETE=bash_source uv run python {script_path})\"[/dim]"
         )
-        console.print(f"\n[yellow]Or for this session only, run:[/yellow]")
+        console.print("\n[yellow]Or for this session only, run:[/yellow]")
         console.print(
             f"[dim]eval \"$(_{base_name.upper().replace('-', '_')}_COMPLETE=bash_source uv run python {script_path})\"[/dim]"
         )
 
     elif shell == "fish":
-        console.print(f"\n[green]Add this line to ~/.config/fish/config.fish:[/green]")
+        console.print("\n[green]Add this line to ~/.config/fish/config.fish:[/green]")
         console.print(
             f"[dim]eval (env _{base_name.upper().replace('-', '_')}_COMPLETE=fish_source uv run python {script_path})[/dim]"
         )
-        console.print(f"\n[yellow]Or for this session only, run:[/yellow]")
+        console.print("\n[yellow]Or for this session only, run:[/yellow]")
         console.print(
             f"[dim]eval (env _{base_name.upper().replace('-', '_')}_COMPLETE=fish_source uv run python {script_path})[/dim]"
         )
@@ -7878,7 +7878,7 @@ def install_completion_cmd(
         )
         console.print("Supported shells: bash, zsh, fish")
 
-    console.print(f"\n[blue]ℹ[/blue] After adding the line, reload your shell with:")
+    console.print("\n[blue]ℹ[/blue] After adding the line, reload your shell with:")
     console.print(
         f"[dim]source ~/.{shell}rc[/dim] (for bash/zsh) or restart your terminal"
     )
