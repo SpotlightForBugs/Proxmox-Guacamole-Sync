@@ -39,6 +39,11 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn
+# Pylint: some imports intentionally live inside functions to avoid heavy startup
+# or circular imports. Also some 'pass' statements are used intentionally to
+# silence non-critical exceptions in probing code paths. Disable the following
+# checks at module level to reduce noisy warnings.
+# pylint: disable=import-outside-toplevel, unnecessary-pass
 
 try:
     from config import Config
@@ -99,9 +104,8 @@ def complete_connection_names(incomplete: str):
             return [
                 name for name in names if name.lower().startswith(incomplete.lower())
             ]
-    except:
-        pass
-    return []
+    except Exception:
+            return []
 
 
 def complete_vm_names(incomplete: str):
@@ -118,9 +122,8 @@ def complete_vm_names(incomplete: str):
             return [
                 name for name in all_vms if name.lower().startswith(incomplete.lower())
             ]
-    except:
-        pass
-    return []
+    except Exception:
+            return []
 
 
 def complete_protocols(incomplete: str):
@@ -180,9 +183,8 @@ def get_connection_suggestions():
                 for conn in connections.values()
                 if conn.get("name")
             ]
-    except:
-        pass
-    return []
+    except Exception:
+            return []
 
 
 def interactive_menu_with_navigation(
@@ -4458,9 +4460,9 @@ def interactive_add_vm(
                             )
                             # Remove any existing structured lines to avoid duplication
                             note_lines = [
-                                l
-                                for l in existing_notes.splitlines()
-                                if not l.strip().endswith(";")
+                                line
+                                for line in existing_notes.splitlines()
+                                if not line.strip().endswith(";")
                             ]
                             note_lines.extend(pulled_lines)
                             new_notes = "\n".join(note_lines)
