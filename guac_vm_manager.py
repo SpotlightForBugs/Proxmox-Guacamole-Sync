@@ -833,12 +833,11 @@ class GuacamoleAPI:
                             return True
                         # Silent failure, try next endpoint
                         continue
-                    elif response.status_code == 404:
+                    if response.status_code == 404:
                         # Expected for installations without /guacamole prefix
                         continue
-                    else:
-                        # Silent failure, try next endpoint
-                        continue
+                    # Silent failure, try next endpoint
+                    continue
 
                 except requests.exceptions.RequestException:
                     # Silent failure, try next endpoint
@@ -886,12 +885,11 @@ class GuacamoleAPI:
                                 return True
                             # Silent failure, try next endpoint
                             continue
-                        elif response.status_code == 404:
+                        if response.status_code == 404:
                             # Expected for installations without /guacamole prefix
                             continue
-                        else:
-                            # Silent failure, try next endpoint
-                            continue
+                        # Silent failure, try next endpoint
+                        continue
 
                     except requests.exceptions.RequestException:
                         # Silent failure, try next endpoint
@@ -953,10 +951,9 @@ class GuacamoleAPI:
                     return response.json()
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to get connections from {connections_url}: {response.status_code}"
-                    )
+                print(
+                    f"Failed to get connections from {connections_url}: {response.status_code}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Request failed for {connections_url}: {e}")
                 continue
@@ -1011,10 +1008,9 @@ class GuacamoleAPI:
                     return connection_info
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to get connection details from {detail_url}: {response.status_code}"
-                    )
+                print(
+                    f"Failed to get connection details from {detail_url}: {response.status_code}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Request failed: {e}")
                 continue
@@ -1042,10 +1038,9 @@ class GuacamoleAPI:
                     return response.json()
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to get connection groups from {groups_url}: {response.status_code}"
-                    )
+                print(
+                    f"Failed to get connection groups from {groups_url}: {response.status_code}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Request failed for {groups_url}: {e}")
                 continue
@@ -1303,9 +1298,8 @@ class GuacamoleAPI:
                     return True
                 if response.status_code == 404:
                     continue
-                else:
-                    # Try alternative approach - some Guacamole versions need different method
-                    continue
+                # Try alternative approach - some Guacamole versions need different method
+                continue
             except requests.exceptions.RequestException as e:
                 continue
 
@@ -1337,8 +1331,7 @@ class GuacamoleAPI:
                     return True
                 if response.status_code == 404:
                     continue
-                else:
-                    continue
+                continue
             except requests.exceptions.RequestException as e:
                 continue
 
@@ -1393,8 +1386,7 @@ class GuacamoleAPI:
                     return True
                 if response.status_code == 404:
                     continue
-                else:
-                    continue
+                continue
             except requests.exceptions.RequestException as e:
                 continue
 
@@ -1467,8 +1459,7 @@ class GuacamoleAPI:
                     return None
                 if response.status_code == 404:
                     continue
-                else:
-                    print(f"Failed to create group: {response.status_code}")
+                print(f"Failed to create group: {response.status_code}")
             except requests.exceptions.RequestException as e:
                 print(f"Request failed for group creation: {e}")
                 continue
@@ -1655,10 +1646,9 @@ class GuacamoleAPI:
                     return identifier
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to create RDP connection via {endpoint}: {response.status_code} {response.text}"
-                    )
+                print(
+                    f"Failed to create RDP connection via {endpoint}: {response.status_code} {response.text}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Failed to create RDP connection via {endpoint}: {e}")
                 if hasattr(e, "response") and e.response is not None:
@@ -1769,10 +1759,9 @@ class GuacamoleAPI:
                     return identifier
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to create VNC connection via {endpoint}: {response.status_code} {response.text}"
-                    )
+                print(
+                    f"Failed to create VNC connection via {endpoint}: {response.status_code} {response.text}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Failed to create VNC connection via {endpoint}: {e}")
                 if hasattr(e, "response") and e.response is not None:
@@ -1866,10 +1855,9 @@ class GuacamoleAPI:
                     return identifier
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to create SSH connection via {endpoint}: {response.status_code} {response.text}"
-                    )
+                print(
+                    f"Failed to create SSH connection via {endpoint}: {response.status_code} {response.text}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Failed to create SSH connection via {endpoint}: {e}")
                 if hasattr(e, "response") and e.response is not None:
@@ -3636,9 +3624,8 @@ def interactive_add_vm(
                         except Exception as e:
                             print(f"Edit error: {e}")
                         continue
-                    else:
-                        print("Please choose a / i / e")
-                        continue
+                    print("Please choose a / i / e")
+                    continue
         else:
             console.print(
                 "\n[yellow]Warning: No credentials found in VM notes[/yellow]"
