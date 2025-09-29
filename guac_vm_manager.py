@@ -5365,7 +5365,7 @@ def analyze_connections_for_grouping(connection_details):
         name_lower = conn["name"].lower()
         hostname_lower = conn["params"].get("hostname", "").lower()
 
-        for keyword in environment_groups.keys():
+        for keyword in environment_groups:
             if keyword in name_lower or keyword in hostname_lower:
                 environment_groups[keyword].append(conn)
                 break
