@@ -1998,8 +1998,6 @@ class ProxmoxAPI:
         lower = notes.lower()
         if "encrypted_password:" in lower:
             return False
-        # crude detection: any occurrence of pass: or password: followed by non-empty token
-        import re
 
         m = re.search(r'(?:pass|password):\s*["\']?([^"\';\s]+)', notes, re.IGNORECASE)
         return bool(m)
@@ -2151,9 +2149,6 @@ class ProxmoxAPI:
 
         if not notes:
             return credentials
-
-        import re
-        import socket
 
         # Get additional variables for templates (passed as parameters)
         hostname = socket.gethostname().split(".")[0]  # Local hostname
@@ -2460,8 +2455,6 @@ class ProxmoxAPI:
                     if password and "encrypted_password" not in params:
                         encrypted = self._encrypt_password(password)
                         if encrypted:
-                            # Replace the password with encrypted_password
-                            import re
 
                             # Match quoted passwords more carefully
                             password_pattern = f'pass:"{re.escape(password)}"'
@@ -2492,7 +2485,6 @@ class ProxmoxAPI:
         Process VM notes to encrypt passwords and update VM if changes are made.
         Returns the processed notes string.
         """
-        import re
 
         if not notes:
             return notes
@@ -3051,7 +3043,6 @@ def interactive_add_vm(
             return False
         console.print("\n[cyan]Fetching VMs from Proxmox...[/cyan]")
         try:
-            from rich.progress import Progress, SpinnerColumn, TextColumn
 
             with Progress(
                 SpinnerColumn(),
@@ -3222,8 +3213,6 @@ def interactive_add_vm(
             console.print(
                 f"[yellow]✔ {len(vms_with_configured_creds)} VMs already configured[/yellow]"
             )
-
-        from rich.table import Table  # local import to avoid import ordering issues
 
         table = Table(title=f" Proxmox VMs ({len(prioritized_vms)} found)")
         table.add_column("#", style="bold", no_wrap=True, width=4)
@@ -3482,8 +3471,6 @@ def interactive_add_vm(
                     print(
                         f" Found {len(ips)} ARP entries. Scanning default service ports (22,3389,5900)..."
                     )
-                    # Simple multithreaded port scan (fast timeout)
-                    import socket
                     from concurrent.futures import ThreadPoolExecutor, as_completed
 
                     def check(
@@ -4351,14 +4338,10 @@ def interactive_add_vm(
                 disable_threads = os.environ.get("GUAC_DISABLE_THREADS") == "1"
                 from concurrent.futures import ThreadPoolExecutor, as_completed
                 from rich.progress import (
-                    Progress,
-                    SpinnerColumn,
-                    TextColumn,
                     BarColumn,
                     TimeElapsedColumn,
                 )
                 from rich.live import Live
-                from rich.table import Table
 
                 def do_update(entry):
                     conn, identifier = entry
@@ -4514,14 +4497,10 @@ def interactive_add_vm(
             disable_threads = os.environ.get("GUAC_DISABLE_THREADS") == "1"
             from concurrent.futures import ThreadPoolExecutor, as_completed
             from rich.progress import (
-                Progress,
-                SpinnerColumn,
-                TextColumn,
                 BarColumn,
                 TimeElapsedColumn,
             )
             from rich.live import Live
-            from rich.table import Table
 
             def do_update(entry):
                 conn, identifier = entry
@@ -4628,11 +4607,7 @@ def interactive_add_vm(
     )  # cap to keep UI responsive
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from rich.live import Live
-    from rich.table import Table
     from rich.progress import (
-        Progress,
-        SpinnerColumn,
-        TextColumn,
         BarColumn,
         TimeElapsedColumn,
     )
@@ -5003,9 +4978,6 @@ def list_connections(
         conn_details = guac_api.get_connection_details(conn_id)
         params = conn_details.get("parameters", {})
 
-        # Enhanced hostname/IP display
-        import socket
-
         ip_address = params.get("hostname", "N/A")
         display_hostname = ip_address
 
@@ -5104,7 +5076,6 @@ def list_connections(
 
         # Filter by connection name pattern
         if filter_connection:
-            import re
 
             try:
                 if not re.search(filter_connection, name, re.IGNORECASE):
@@ -5116,7 +5087,6 @@ def list_connections(
 
         # Filter by VM name pattern
         if should_include and filter_vm:
-            import re
 
             try:
                 if not re.search(filter_vm, pve_source, re.IGNORECASE):
@@ -5147,7 +5117,6 @@ def list_connections(
 
         # Filter by group
         if should_include and filter_group:
-            import re
 
             group_name = conn.get("parentIdentifier", "ROOT")
             if group_name != "ROOT":
@@ -5349,7 +5318,6 @@ def analyze_connections_for_grouping(connection_details):
         if hostname:
             # Check if it's an IP address
             try:
-                import ipaddress
 
                 ip = ipaddress.ip_address(hostname)
                 if ip.is_private:
@@ -5370,9 +5338,6 @@ def analyze_connections_for_grouping(connection_details):
     name_pattern_groups = {}
     for conn in ungrouped_connections:
         name = conn["name"].lower()
-
-        # Extract base name (remove protocol suffixes and numbers)
-        import re
 
         base_name = re.sub(r"[-_](rdp|ssh|vnc|http|https)(\d+)?$", "", name)
         base_name = re.sub(r"\d+$", "", base_name).strip("-_")
@@ -5537,7 +5502,6 @@ def suggest_group_name_from_connections(connections, hostname):
 
     # Try to extract hostname or meaningful part
     try:
-        import socket
 
         resolved_name = socket.gethostbyaddr(hostname)[0]
         if resolved_name and "." in resolved_name:
@@ -5608,8 +5572,6 @@ def extract_base_name(connection_name):
         r"-\d+$",  # Remove port numbers
         r":\d+$",  # Remove :port
     ]
-
-    import re
 
     for pattern in patterns_to_remove:
         name = re.sub(pattern, "", name)
@@ -5723,9 +5685,6 @@ def delete_connections_interactive():
                 console.print(
                     f"\n[red]{selected_count} item(s) selected for deletion[/red]"
                 )
-
-            # Get user input
-            import sys
             import tty
             import termios
 
@@ -5926,9 +5885,6 @@ def edit_connections_interactive():
                 console.print(
                     f"{prefix} [{style} {highlight}]{item['display']}[/{style} {highlight}]"
                 )
-
-            # Get user input
-            import sys
             import tty
             import termios
 
@@ -6339,7 +6295,6 @@ def process_single_vm_auto(
                 console.print(
                     "   [yellow] Waiting 30 seconds for VM to boot...[/yellow]"
                 )
-                import time
 
                 time.sleep(30)
             else:
@@ -6516,9 +6471,7 @@ def auto_process_all_vms(
     dry_run=False,
 ):
     """Auto-process all VMs with credentials in notes with enhanced output."""
-    import time
     import threading
-    from rich.text import Text
 
     # Enhanced header with better styling
     title_text = Text("● AUTO VM PROCESSOR", style="bold cyan")
@@ -6982,7 +6935,6 @@ def edit_connections_by_pattern(
     for conn_id, conn in connections.items():
         name = conn.get("name", "")
         for pattern in patterns:
-            import re
 
             try:
                 if re.search(pattern, name, re.IGNORECASE):
@@ -7113,7 +7065,6 @@ def delete_connections_by_pattern(
             for conn_id, conn in connections.items():
                 name = conn.get("name", "")
                 for pattern in patterns:
-                    import re
 
                     try:
                         if re.search(pattern, name, re.IGNORECASE):
@@ -7137,7 +7088,6 @@ def delete_connections_by_pattern(
             for group_id, group in groups.items():
                 name = group.get("name", "")
                 for pattern in patterns:
-                    import re
 
                     try:
                         if re.search(pattern, name, re.IGNORECASE):
@@ -7311,11 +7261,9 @@ def add_external_host(
     try:
         # Handle password input
         if password_stdin:
-            import sys
 
             password = sys.stdin.read().strip()
         elif password is None and not auto_approve:
-            import getpass
 
             password = getpass.getpass("Password: ")
 
@@ -7328,7 +7276,6 @@ def add_external_host(
         if not username:
             username = input("Username: ").strip()
         if not password and not password_stdin:
-            import getpass
 
             password = getpass.getpass("Password: ")
 
@@ -7438,7 +7385,6 @@ def test_auth(
         verbose_mode = verbose or (log_file is not None)
     if log_file:
         verbose_log_file = log_file
-    from rich.text import Text
 
     # Create header panel
     console.print(
@@ -7458,7 +7404,6 @@ def test_auth(
 
         step_symbol = "✓"
         try:
-            from cryptography.fernet import Fernet
 
             key = getattr(config, "ENCRYPTION_KEY", None)
             if key:
@@ -7765,7 +7710,6 @@ def delete_connections_cmd(
 @app.command("interactive")
 def interactive_menu():
     """Interactive menu mode"""
-    from rich.text import Text
     from rich.columns import Columns
     from rich.align import Align
 
@@ -7821,7 +7765,6 @@ def interactive_menu():
                 console.print(
                     "\n[dim]Connection list complete. Returning to menu...[/dim]"
                 )
-                import time
 
                 time.sleep(1.5)  # Brief pause to let user read the message
             elif choice == "5":
@@ -7866,7 +7809,6 @@ def interactive_menu():
                 console.print(
                     "\n[dim]CLI reference complete. Returning to menu...[/dim]"
                 )
-                import time
 
                 time.sleep(1.5)  # Brief pause to let user read the message
 
@@ -7910,8 +7852,6 @@ def install_completion_cmd(
     )
 ):
     """Install shell completion for the CLI"""
-    import subprocess
-    import sys
 
     # Detect shell if not provided
     if not shell:
@@ -8005,7 +7945,6 @@ def main(
         verbose_mode = True
         verbose_log_file = log_file
     if ctx.invoked_subcommand is None:
-        import sys
 
         if (
             os.environ.get("PYTEST_CURRENT_TEST")
