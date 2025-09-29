@@ -38,6 +38,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn
+
 # Pylint: some imports intentionally live inside functions to avoid heavy startup
 # or circular imports. Also some 'pass' statements are used intentionally to
 # silence non-critical exceptions in probing code paths. Disable the following
@@ -104,7 +105,7 @@ def complete_connection_names(incomplete: str):
                 name for name in names if name.lower().startswith(incomplete.lower())
             ]
     except Exception:
-            return []
+        return []
 
 
 def complete_vm_names(incomplete: str):
@@ -122,7 +123,7 @@ def complete_vm_names(incomplete: str):
                 name for name in all_vms if name.lower().startswith(incomplete.lower())
             ]
     except Exception:
-            return []
+        return []
 
 
 def complete_protocols(incomplete: str):
@@ -183,7 +184,7 @@ def get_connection_suggestions():
                 if conn.get("name")
             ]
     except Exception:
-            return []
+        return []
 
 
 def interactive_menu_with_navigation(
@@ -2947,8 +2948,6 @@ class NetworkScanner:
         except Exception:
             return None
         return None
-
-        
 
 
 class WakeOnLan:
