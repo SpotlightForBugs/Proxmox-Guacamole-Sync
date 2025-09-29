@@ -2893,30 +2893,6 @@ class NetworkScanner:
         """Find a specific MAC address on the local network"""
         print(f" Searching for MAC address {target_mac} on local network...")
 
-    @staticmethod
-    def find_mac_by_ip(target_ip: str) -> Optional[str]:
-        """Attempt to resolve MAC address for a given IPv4 via ARP (ping first if needed)."""
-        try:
-            # First try ARP table directly
-            entries = NetworkScanner.scan_arp_table()
-            for e in entries:
-                if e.get("ip") == target_ip:
-                    return e.get("mac")
-            # Ping target to populate ARP
-            subprocess.run(
-                ["ping", "-c", "1", "-W", "1000", target_ip],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=2,
-            )
-            entries = NetworkScanner.scan_arp_table()
-            for e in entries:
-                if e.get("ip") == target_ip:
-                    return e.get("mac")
-        except Exception:
-            return None
-        return None
-
         # First check ARP table
         entries = NetworkScanner.scan_arp_table(target_mac)
         if entries:
@@ -2948,6 +2924,32 @@ class NetworkScanner:
         print(f"   - VM is on a different network segment")
         print(f"   - MAC address in Proxmox config doesn't match actual VM")
         return None
+
+    @staticmethod
+    def find_mac_by_ip(target_ip: str) -> Optional[str]:
+        """Attempt to resolve MAC address for a given IPv4 via ARP (ping first if needed)."""
+        try:
+            # First try ARP table directly
+            entries = NetworkScanner.scan_arp_table()
+            for e in entries:
+                if e.get("ip") == target_ip:
+                    return e.get("mac")
+            # Ping target to populate ARP
+            subprocess.run(
+                ["ping", "-c", "1", "-W", "1000", target_ip],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+            )
+            entries = NetworkScanner.scan_arp_table()
+            for e in entries:
+                if e.get("ip") == target_ip:
+                    return e.get("mac")
+        except Exception:
+            return None
+        return None
+
+        
 
 
 class WakeOnLan:
