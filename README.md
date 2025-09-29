@@ -1,9 +1,4 @@
 # Proxmox-Guacamole Sync
-
-[![DeepSource](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync.svg/?label=active+issues&show_trend=true&token=ve86Yayt5stmo_wDrIby5Vwj)](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync/)
-
-[![DeepSource](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync.svg/?label=resolved+issues&show_trend=true&token=ve86Yayt5stmo_wDrIby5Vwj)](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync/)
-
 Automated synchronization tool that bridges Proxmox VE and Apache Guacamole by parsing VM connection credentials from Proxmox VM notes and creating corresponding remote desktop/SSH connections in Guacamole.
 
 ## Architecture
