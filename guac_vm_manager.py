@@ -5927,7 +5927,7 @@ def edit_connections_interactive():
         console.print("[yellow]Action cancelled.[/yellow]")
         return True
 
-    elif selected_item["type"] == "group":
+    if selected_item["type"] == "group":
         action_choice = (
             console.input(
                 "[bold]Available actions:[/bold]\n"
