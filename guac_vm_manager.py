@@ -930,9 +930,8 @@ class GuacamoleAPI:
 
     def get_connections(self) -> Dict:
         """Get list of existing connections"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return {}
+        if not self.auth_token and not self.authenticate():
+            return {}
 
         for connections_url in self._build_api_endpoints("connections"):
             try:
@@ -963,9 +962,8 @@ class GuacamoleAPI:
 
     def get_connection_details(self, connection_id: str) -> Dict:
         """Get detailed connection parameters for a specific connection"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return {}
+        if not self.auth_token and not self.authenticate():
+            return {}
 
         # Use cached working base path if available, otherwise try all paths
         working_data_source = getattr(self, "_working_data_source", None)
@@ -1027,9 +1025,8 @@ class GuacamoleAPI:
 
     def get_connection_groups(self) -> Dict:
         """Get list of existing connection groups"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return {}
+        if not self.auth_token and not self.authenticate():
+            return {}
 
         for groups_url in self._build_api_endpoints("connectionGroups"):
             try:
@@ -1424,15 +1421,17 @@ class GuacamoleAPI:
                 ]:  # Accept both 200 and 201 as success
                     # Cache the working data source if not already cached
                     if (
+                        (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
+                    )
+                        and "/session/data/" in endpoint
                     ):
-                        if "/session/data/" in endpoint:
-                            parts = endpoint.split("/session/data/")
-                            if len(parts) > 1:
-                                data_source_part = parts[1].split("/")[0]
-                                self._working_data_source = data_source_part
-                                self._save_working_endpoints_to_config()
+                        parts = endpoint.split("/session/data/")
+                        if len(parts) > 1:
+                            data_source_part = parts[1].split("/")[0]
+                            self._working_data_source = data_source_part
+                            self._save_working_endpoints_to_config()
                     data = response.json()
                     identifier = data.get("identifier")
                     print(f"Created connection group '{name}' (ID: {identifier})")
@@ -1561,9 +1560,8 @@ class GuacamoleAPI:
         wol_settings: Optional[Dict[str, str]] = None,
     ) -> Optional[str]:
         """Create RDP connection in Guacamole"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return None
+        if not self.auth_token and not self.authenticate():
+            return None
 
         connection_data = {
             "name": name,
@@ -1629,15 +1627,17 @@ class GuacamoleAPI:
                 if response.status_code in (200, 201):
                     # Cache the working data source if not already cached
                     if (
+                        (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
+                    )
+                        and "/session/data/" in endpoint
                     ):
-                        if "/session/data/" in endpoint:
-                            parts = endpoint.split("/session/data/")
-                            if len(parts) > 1:
-                                data_source_part = parts[1].split("/")[0]
-                                self._working_data_source = data_source_part
-                                self._save_working_endpoints_to_config()
+                        parts = endpoint.split("/session/data/")
+                        if len(parts) > 1:
+                            data_source_part = parts[1].split("/")[0]
+                            self._working_data_source = data_source_part
+                            self._save_working_endpoints_to_config()
                     data = response.json()
                     identifier = data.get("identifier")
                     print(
@@ -1670,9 +1670,8 @@ class GuacamoleAPI:
         vnc_settings: Optional[Dict[str, str]] = None,
     ) -> Optional[str]:
         """Create VNC connection in Guacamole"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return None
+        if not self.auth_token and not self.authenticate():
+            return None
 
         # Default VNC parameters with enhanced options
         vnc_params = {
@@ -1742,15 +1741,17 @@ class GuacamoleAPI:
                 if response.status_code in (200, 201):
                     # Cache the working data source if not already cached
                     if (
+                        (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
+                    )
+                        and "/session/data/" in endpoint
                     ):
-                        if "/session/data/" in endpoint:
-                            parts = endpoint.split("/session/data/")
-                            if len(parts) > 1:
-                                data_source_part = parts[1].split("/")[0]
-                                self._working_data_source = data_source_part
-                                self._save_working_endpoints_to_config()
+                        parts = endpoint.split("/session/data/")
+                        if len(parts) > 1:
+                            data_source_part = parts[1].split("/")[0]
+                            self._working_data_source = data_source_part
+                            self._save_working_endpoints_to_config()
                     data = response.json()
                     identifier = data.get("identifier")
                     print(
@@ -1838,15 +1839,17 @@ class GuacamoleAPI:
                 if response.status_code in (200, 201):
                     # Cache the working data source if not already cached
                     if (
+                        (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
+                    )
+                        and "/session/data/" in endpoint
                     ):
-                        if "/session/data/" in endpoint:
-                            parts = endpoint.split("/session/data/")
-                            if len(parts) > 1:
-                                data_source_part = parts[1].split("/")[0]
-                                self._working_data_source = data_source_part
-                                self._save_working_endpoints_to_config()
+                        parts = endpoint.split("/session/data/")
+                        if len(parts) > 1:
+                            data_source_part = parts[1].split("/")[0]
+                            self._working_data_source = data_source_part
+                            self._save_working_endpoints_to_config()
                     data = response.json()
                     identifier = data.get("identifier")
                     print(
@@ -3709,29 +3712,33 @@ def interactive_add_vm(
                     .lower()
                 )
 
-            if start_choice == "" or start_choice in ("y", "yes"):
-                if vm_node and vm_id and proxmox_api.start_vm(vm_node, vm_id):
-                    vm_was_started = True
-                    print(
-                        " Waiting 30 seconds for VM to boot and connect to network..."
-                    )
-                    time.sleep(30)
+            if (
+                start_choice == ""
+                or start_choice in ("y", "yes")
+                and vm_node and vm_id
+                and proxmox_api.start_vm(vm_node, vm_id)
+            ):
+                vm_was_started = True
+                print(
+                    " Waiting 30 seconds for VM to boot and connect to network..."
+                )
+                time.sleep(30)
 
-                    # Try network scan again with all MACs
-                    print(" Scanning for VM on network after startup...")
-                    for mac in vm_macs:
-                        network_scan_result = NetworkScanner.find_mac_on_network(mac)
-                        if network_scan_result:
-                            found_mac = mac
-                            print(
-                                f" Found MAC {mac} on network at IP {network_scan_result['ip']} after startup"
-                            )
-                            break
-
-                    if not network_scan_result:
+                # Try network scan again with all MACs
+                print(" Scanning for VM on network after startup...")
+                for mac in vm_macs:
+                    network_scan_result = NetworkScanner.find_mac_on_network(mac)
+                    if network_scan_result:
+                        found_mac = mac
                         print(
-                            "  VM started but not yet detected on network (may need more time to boot)"
+                            f" Found MAC {mac} on network at IP {network_scan_result['ip']} after startup"
                         )
+                        break
+
+                if not network_scan_result:
+                    print(
+                        "  VM started but not yet detected on network (may need more time to boot)"
+                    )
         elif not network_scan_result and not is_external_host:
             # VM is running but not found on network - this might be normal for some network configs
             print(f"  VM is {original_status} but not detected on network")
@@ -3905,15 +3912,18 @@ def interactive_add_vm(
 
         # Update parsed credentials with actual IP if we have it (Proxmox VMs only)
         if (
+            (
             selected_hostname
             and selected_hostname != "unknown"
             and parsed_credentials
             and not is_external_host
+        )
+            and vm_id is not None
+            and vm_node
         ):
-            if vm_id is not None and vm_node:
-                parsed_credentials = proxmox_api.parse_credentials_from_notes(
-                    vm_notes, vm_name, str(vm_id), vm_node, selected_hostname
-                )
+            parsed_credentials = proxmox_api.parse_credentials_from_notes(
+                vm_notes, vm_name, str(vm_id), vm_node, selected_hostname
+            )
     else:
         if not is_external_host:
             # No IP options found - provide helpful guidance (Proxmox only)
@@ -4014,12 +4024,11 @@ def interactive_add_vm(
             .strip()
             .lower()
         )
-        if dp:
-            if dp not in ("rdp", "vnc", "ssh"):
-                console.print(
-                    "[yellow]Warning: Invalid protocol. Protocols must be specified per account.[/yellow]"
-                )
-                dp = None
+        if dp and dp not in ("rdp", "vnc", "ssh"):
+            console.print(
+                "[yellow]Warning: Invalid protocol. Protocols must be specified per account.[/yellow]"
+            )
+            dp = None
         default_protocol = dp or None
 
         if default_protocol == "rdp":
@@ -5070,9 +5079,12 @@ def list_connections(
                     should_include = False
 
         # Filter by protocol
-        if should_include and filter_protocol:
-            if protocol.lower() != filter_protocol.lower():
-                should_include = False
+        if (
+            should_include
+            and filter_protocol
+            and protocol.lower() != filter_protocol.lower()
+        ):
+            should_include = False
 
         # Filter by status
         if should_include and filter_status:
