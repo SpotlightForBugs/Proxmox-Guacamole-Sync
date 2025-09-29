@@ -4370,43 +4370,42 @@ def interactive_add_vm(
                         tbl.add_row(conn["name"], st, res)
                     return tbl
 
-                with Live(build_table(), console=console, refresh_per_second=20):
-                    with progress:
-                        if disable_threads or len(updates_needed) == 1:
-                            progress.update(
-                                task_id, description="Updating (sequential mode)..."
+                with Live(build_table(), console=console, refresh_per_second=20), progress:
+                    if disable_threads or len(updates_needed) == 1:
+                        progress.update(
+                            task_id, description="Updating (sequential mode)..."
+                        )
+                        for entry in updates_needed:
+                            conn, _id = entry
+                            update_status[conn["name"]] = ("running", "")
+                            name, err = do_update(entry)
+                            update_status[name] = (
+                                ("done", "OK")
+                                if not err
+                                else ("error", err.split("\n")[0][:60])
                             )
-                            for entry in updates_needed:
-                                conn, _id = entry
-                                update_status[conn["name"]] = ("running", "")
-                                name, err = do_update(entry)
+                            progress.advance(task_id)
+                    else:
+                        max_workers = min(8, len(updates_needed))
+                        progress.update(
+                            task_id,
+                            description=f"Updating with {max_workers} workers...",
+                        )
+                        with ThreadPoolExecutor(
+                            max_workers=max_workers
+                        ) as executor:
+                            future_map = {
+                                executor.submit(do_update, entry): entry
+                                for entry in updates_needed
+                            }
+                            for fut in as_completed(future_map):
+                                name, err = fut.result()
                                 update_status[name] = (
                                     ("done", "OK")
                                     if not err
                                     else ("error", err.split("\n")[0][:60])
                                 )
                                 progress.advance(task_id)
-                        else:
-                            max_workers = min(8, len(updates_needed))
-                            progress.update(
-                                task_id,
-                                description=f"Updating with {max_workers} workers...",
-                            )
-                            with ThreadPoolExecutor(
-                                max_workers=max_workers
-                            ) as executor:
-                                future_map = {
-                                    executor.submit(do_update, entry): entry
-                                    for entry in updates_needed
-                                }
-                                for fut in as_completed(future_map):
-                                    name, err = fut.result()
-                                    update_status[name] = (
-                                        ("done", "OK")
-                                        if not err
-                                        else ("error", err.split("\n")[0][:60])
-                                    )
-                                    progress.advance(task_id)
             elif update_choice in ("r", "recreate"):
                 for conn, identifier in updates_needed:
                     print(f"Recreating: deleting '{conn['name']}' first")
@@ -4527,41 +4526,40 @@ def interactive_add_vm(
                     tbl.add_row(conn["name"], st, res)
                 return tbl
 
-            with Live(build_table(), console=console, refresh_per_second=20):
-                with progress:
-                    if disable_threads or len(updates_needed) == 1:
-                        progress.update(
-                            task_id, description="Updating (sequential mode)..."
+            with Live(build_table(), console=console, refresh_per_second=20), progress:
+                if disable_threads or len(updates_needed) == 1:
+                    progress.update(
+                        task_id, description="Updating (sequential mode)..."
+                    )
+                    for entry in updates_needed:
+                        conn, _id = entry
+                        update_status[conn["name"]] = ("running", "")
+                        name, err = do_update(entry)
+                        update_status[name] = (
+                            ("done", "OK")
+                            if not err
+                            else ("error", err.split("\n")[0][:60])
                         )
-                        for entry in updates_needed:
-                            conn, _id = entry
-                            update_status[conn["name"]] = ("running", "")
-                            name, err = do_update(entry)
+                        progress.advance(task_id)
+                else:
+                    max_workers = min(8, len(updates_needed))
+                    progress.update(
+                        task_id,
+                        description=f"Updating with {max_workers} workers...",
+                    )
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        future_map = {
+                            executor.submit(do_update, entry): entry
+                            for entry in updates_needed
+                        }
+                        for fut in as_completed(future_map):
+                            name, err = fut.result()
                             update_status[name] = (
                                 ("done", "OK")
                                 if not err
                                 else ("error", err.split("\n")[0][:60])
                             )
                             progress.advance(task_id)
-                    else:
-                        max_workers = min(8, len(updates_needed))
-                        progress.update(
-                            task_id,
-                            description=f"Updating with {max_workers} workers...",
-                        )
-                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                            future_map = {
-                                executor.submit(do_update, entry): entry
-                                for entry in updates_needed
-                            }
-                            for fut in as_completed(future_map):
-                                name, err = fut.result()
-                                update_status[name] = (
-                                    ("done", "OK")
-                                    if not err
-                                    else ("error", err.split("\n")[0][:60])
-                                )
-                                progress.advance(task_id)
 
     # Handle duplicates (unchanged connections)
     if duplicates:
