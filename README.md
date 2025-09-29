@@ -1,5 +1,9 @@
 # Proxmox-Guacamole Sync
 
+[![DeepSource](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync.svg/?label=active+issues&show_trend=true&token=ve86Yayt5stmo_wDrIby5Vwj)](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync/)
+
+[![DeepSource](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync.svg/?label=resolved+issues&show_trend=true&token=ve86Yayt5stmo_wDrIby5Vwj)](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync/)
+
 Automated synchronization tool that bridges Proxmox VE and Apache Guacamole by parsing VM connection credentials from Proxmox VM notes and creating corresponding remote desktop/SSH connections in Guacamole.
 
 ## Architecture
@@ -540,3 +544,36 @@ uv run python guac_vm_manager.py test-network "vm:mac:address"
 ## License
 
 MIT License - See LICENSE file for details
+
+## Continuous Integration (CI)
+
+A GitHub Actions workflow is included at `.github/workflows/ci.yml`. It runs on pushes and pull requests to `main` and performs lightweight checks to keep the repository healthy.
+
+Workflow summary:
+- Matrix: Python 3.10, 3.11, 3.12
+- Installs runtime dependencies from `requirements.txt`
+- Runs `scripts/check_no_emojis.py` to enforce the repository's no-emoji policy
+- Compiles Python files to catch syntax errors (`python -m compileall`)
+ - Static analysis (linting) is delegated to DeepSource (see `.deepsource.toml`)
+
+Run the same checks locally (macOS / zsh):
+
+```bash
+# create and activate a virtualenv
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+# run emoji policy check
+python scripts/check_no_emojis.py
+
+# syntax check
+python -m compileall -q .
+
+Note: linting and static analysis are performed by DeepSource using the
+configuration in `.deepsource.toml`. To enable DeepSource for this repository,
+connect the repo at https://deepsource.io and use the existing `.deepsource.toml`.
+```
+
+If you'd like, I can add additional CI workflows (coverage reporting, automated releases, or security scans) as follow-ups.
