@@ -29,7 +29,6 @@ import hashlib
 from cryptography.fernet import Fernet
 from typing import Dict, List, Optional, Tuple
 import time
-import sys
 import subprocess
 import re
 import ipaddress
@@ -190,7 +189,6 @@ def interactive_menu_with_navigation(
     options: List[Tuple[str, str]], prompt: str = "Select option"
 ) -> str:
     """Enhanced menu with TAB/arrow key navigation"""
-    import sys
     import tty
     import termios
 
@@ -370,7 +368,6 @@ def run_onboarding():
         "Explaining VM notes format",
         "Next steps",
     ]
-    from rich.progress import Progress, SpinnerColumn, TextColumn
 
     with Progress(
         SpinnerColumn(),
@@ -418,7 +415,6 @@ def run_onboarding():
                         console.print("[red]ENCRYPTION_KEY missing in config.py[/red]")
                     else:
                         try:
-                            from cryptography.fernet import Fernet
 
                             f = Fernet(key)
                             test_plain = b"verification-test"
@@ -448,7 +444,6 @@ def run_onboarding():
                                 )
                                 if resp in ("y", "yes"):
                                     try:
-                                        from cryptography.fernet import Fernet
 
                                         new_key = Fernet.generate_key().decode()
                                         # Patch config.py line in-place
@@ -639,9 +634,6 @@ class GuacamoleAPI:
             if not needs_update:
                 return
 
-            # Update the working endpoint values
-            import re
-
             # Update GUAC_WORKING_BASE_PATH
             base_path_pattern = r"(GUAC_WORKING_BASE_PATH\s*=\s*)[^#\n]*"
             if re.search(base_path_pattern, content):
@@ -693,8 +685,6 @@ class GuacamoleAPI:
         self, method: str, url: str, **kwargs
     ) -> requests.Response:
         """Make an HTTP request with a loading spinner animation"""
-        from rich.progress import Progress, SpinnerColumn, TextColumn
-        import time
 
         # Create a short description for the spinner
         url_parts = url.replace(self.config.GUAC_BASE_URL, "").split("?")[0]
@@ -804,9 +794,6 @@ class GuacamoleAPI:
             "username": self.config.GUAC_USERNAME,
             "password": self.config.GUAC_PASSWORD,
         }
-
-        # Animated authentication (skip if silent)
-        from rich.panel import Panel
 
         if silent:
             # Silent authentication for test-auth command
@@ -1911,8 +1898,6 @@ class ProxmoxAPI:
         self, method: str, url: str, **kwargs
     ) -> requests.Response:
         """Make an HTTP request with a loading spinner animation"""
-        from rich.progress import Progress, SpinnerColumn, TextColumn
-        import time
 
         # Create a short description for the spinner
         url_parts = url.replace(self.config.proxmox_base_url, "").split("?")[0]
