@@ -3673,7 +3673,7 @@ def interactive_add_vm(
                         username = params.get('username') or conn.get('username')
                         password = params.get('password') or conn.get('password')
                         # Compose structured line (unencrypted; encryption step will process)
-                        line = f'user:"{username}" pass:"{password}" protos:"{proto}" confName:"{conn['name']}";'
+                        line = f'user:"{username}" pass:"{password}" protos:"{proto}" confName:"{conn["name"]}";'
                         pulled_lines.append(line)
                     if pulled_lines:
                         try:
