@@ -2757,6 +2757,7 @@ class NetworkScanner:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=True,
             )
 
             gateway_match = re.search(r"gateway: (\d+\.\d+\.\d+\.\d+)", result.stdout)
@@ -2779,12 +2780,12 @@ class NetworkScanner:
         try:
             # Try faster arp command first
             result = subprocess.run(
-                ["arp", "-an"], capture_output=True, text=True, timeout=2
+                ["arp", "-an"], capture_output=True, text=True, timeout=2, check=True
             )
             if result.returncode != 0:
                 # Fallback to regular arp -a
                 result = subprocess.run(
-                    ["arp", "-a"], capture_output=True, text=True, timeout=3
+                    ["arp", "-a"], capture_output=True, text=True, timeout=3, check=True
                 )
 
             for line in result.stdout.split("\n"):
@@ -2928,6 +2929,7 @@ class NetworkScanner:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=2,
+                check=True,
             )
             entries = NetworkScanner.scan_arp_table()
             for e in entries:
