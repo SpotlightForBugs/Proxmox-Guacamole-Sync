@@ -6080,13 +6080,11 @@ def edit_single_connection(guac_api, item):
     try:
         connections = guac_api.get_connections()
         existing_hostnames = list(
-            set(
-                [
-                    conn.get("parameters", {}).get("hostname", "")
+            {
+                conn.get("parameters", {}).get("hostname", "")
                     for conn in connections.values()
                     if conn.get("parameters", {}).get("hostname")
-                ]
-            )
+            }
         )
         if pve_hostname:
             existing_hostnames.append(pve_hostname)
