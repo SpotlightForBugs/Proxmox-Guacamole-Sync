@@ -266,7 +266,7 @@ def interactive_menu_with_navigation(
                     current_index = (current_index + 1) % len(options)
                     if current_index == start_index:  # Prevent infinite loop
                         break
-            elif ch == "\r" or ch == "\n":  # ENTER
+            elif ch in ("\r", "\n"):  # ENTER
                 if current_index < len(options) and options[current_index][0]:
                     return options[current_index][0]
             elif ch in "qQ":
@@ -3920,7 +3920,7 @@ def interactive_add_vm(
                 ip_choice = (
                     input("Choose IP for Guacamole connection [1]: ").strip().lower()
                 )
-                if ip_choice == "" or ip_choice == "1":
+                if ip_choice in ("", "1"):
                     chosen = ip_options[0]
                     break
                 if ip_choice == "m":
@@ -4013,7 +4013,7 @@ def interactive_add_vm(
 
         while True:
             mac_choice = input("Choose MAC for Wake-on-LAN [1]: ").strip().lower()
-            if mac_choice == "" or mac_choice == "1":
+            if mac_choice in ("", "1"):
                 selected_mac = mac_candidates[0]["mac"]
                 break
             if mac_choice == "m":
@@ -5767,7 +5767,7 @@ def delete_connections_interactive():
                     items[current_index]["selected"] = not items[current_index][
                         "selected"
                     ]
-                elif ch == "\r" or ch == "\n":  # Enter - confirm deletion
+                elif ch in ("\r", "\n"):  # Enter - confirm deletion
                     selected_items = [item for item in items if item["selected"]]
                     if selected_items:
                         break
@@ -5966,10 +5966,10 @@ def edit_connections_interactive():
                         # ESC pressed, cancel
                         console.print("\n[yellow]Edit cancelled.[/yellow]")
                         return True
-                elif ch == "\r" or ch == "\n":  # Enter - select item to edit
+                elif ch in ("\r", "\n"):  # Enter - select item to edit
                     selected_item = items[current_index]
                     break
-                elif ch == "q" or ch == "Q":  # Q - quit
+                elif ch in ("q", "Q"):  # Q - quit
                     console.print("\n[yellow]Edit cancelled.[/yellow]")
                     return True
                 elif ch == "\x03":  # Ctrl+C
@@ -7885,7 +7885,7 @@ def interactive_menu():
 
                 time.sleep(1.5)  # Brief pause to let user read the message
 
-            elif choice == "0" or choice == "q":
+            elif choice in ("0", "q"):
                 console.print(
                     Panel(
                         "[bold green]Thank you for using Guacamole VM Manager![/bold green]",
