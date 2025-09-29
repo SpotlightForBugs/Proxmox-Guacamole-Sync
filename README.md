@@ -109,12 +109,54 @@ user:"admin" encrypted_password:"gAAAAABhZ8X2mF1nQ7vP4sE6tA5wK3hL9mN0pQ2rT8uY7iO
 
 ## Example Outputs
 
+### Main Help Command
+```bash
+$ uv run python guac_vm_manager.py --help
+```
+
+![Main Help Output](assets/help-output.svg)
+
 ### Authentication Test
 ```bash
 $ uv run python guac_vm_manager.py test-auth
 ```
 
 ![Authentication Test Output](assets/test-auth-output.svg)
+
+### List Command Help (New Filtering Options)
+```bash
+$ uv run python guac_vm_manager.py list --help
+```
+
+![List Help Output](assets/list-help-output.svg)
+
+### Add Command Help (Proxmox VM Options)
+```bash
+$ uv run python guac_vm_manager.py add --help
+```
+
+![Add Help Output](assets/add-help-output.svg)
+
+### Edit Command Help (Regex Pattern Matching)
+```bash
+$ uv run python guac_vm_manager.py edit --help
+```
+
+![Edit Help Output](assets/edit-help-output.svg)
+
+### Delete Command Help (Pattern Matching & Bulk Operations)
+```bash
+$ uv run python guac_vm_manager.py delete --help
+```
+
+![Delete Help Output](assets/delete-help-output.svg)
+
+### Add-External Command Help (Partial Options)
+```bash
+$ uv run python guac_vm_manager.py add-external --help
+```
+
+![Add-External Help Output](assets/add-external-help-output.svg)
 
 ### VM Discovery and Connection Creation
 ```bash
@@ -271,33 +313,62 @@ pct exec 200 -- bash -c "cd /opt/guacamole && docker compose up -d"
 ## Usage
 
 ### Command Line Interface
+
+All interactive menu options are available as direct CLI commands for automation and scripting. Each command supports extensive options for non-interactive usage, including **partial options** (missing required fields prompt for input) and **advanced pattern matching** with regex support:
+
+#### New Features in Latest Version:
+- **Partial Options**: Commands like `add --vm-id 100` will prompt for missing required fields instead of failing
+- **Regex Pattern Matching**: Use patterns like `.*-admin-.*` or `web-server-.*` for bulk operations
+- **Comma-Separated Multiple Patterns**: `edit --connection "server-.*,db-.*"` matches multiple patterns
+
 ```bash
-# Interactive VM selection and connection setup
-uv run python guac_vm_manager.py add
+# Add Proxmox VM connections (partial options supported - missing fields prompt)
+uv run python guac_vm_manager.py add --vm-id 100 --node pve --auto-approve
+uv run python guac_vm_manager.py add --vm-id 100 --node pve --hostname 192.168.1.10 --protocol rdp --port 3389 --wol --mac "52:54:00:12:34:56"
+uv run python guac_vm_manager.py add --vm-id 100  # Prompts for missing node, hostname, etc.
 
-# Auto-process all VMs with credential notes
-uv run python guac_vm_manager.py auto
+# Add external host connections (fully non-interactive or partial)
+uv run python guac_vm_manager.py add-external --hostname server.example.com --username admin --password-stdin --protocol ssh --port 22 < password.txt
+uv run python guac_vm_manager.py add-external --hostname 192.168.1.100 --name "My Server" --username user --password pass --protocol rdp --wol --mac "aa:bb:cc:dd:ee:ff"
+uv run python guac_vm_manager.py add-external --hostname server.example.com  # Prompts for username, password, protocol, etc.
 
-# Force recreate all connections (ignoring existing)
-uv run python guac_vm_manager.py auto --force
+# Auto-process VMs with advanced filtering and options
+uv run python guac_vm_manager.py auto --force --node pve --start-vms --restore-power
+uv run python guac_vm_manager.py auto --vm "web-server" --dry-run --no-skip-existing
 
-# List existing connections with sync status
-uv run python guac_vm_manager.py list
+# List connections with advanced regex filtering and export options
+uv run python guac_vm_manager.py list --vm "windows-*" --protocol rdp --status ok
+uv run python guac_vm_manager.py list --connection ".*-admin-.*" --group "Production.*" --json
+uv run python guac_vm_manager.py list --csv connections.csv --protocol vnc
 
-# Interactive connection deletion
-uv run python guac_vm_manager.py delete
+# Edit connections with regex pattern matching (bulk operations supported)
+uv run python guac_vm_manager.py edit --connection "server-admin" --hostname new-server.example.com --port 3390 --force
+uv run python guac_vm_manager.py edit --connection "vm-.*-rdp" --username newuser --password newpass --no-wol
+uv run python guac_vm_manager.py edit --connection ".*" --hostname 192.168.1.100  # Bulk update all connections
 
-# Add external (non-Proxmox) host connections
-uv run python guac_vm_manager.py add-external
+# Delete connections and groups with regex pattern matching
+uv run python guac_vm_manager.py delete --connection "old-server" --force
+uv run python guac_vm_manager.py delete --connection "temp-.*" --group "Legacy.*" --force
+uv run python guac_vm_manager.py delete --all  # ⚠️  DANGER: Deletes everything!
 
-# Test API authentication
-uv run python guac_vm_manager.py test-auth
+# Other commands
+uv run python guac_vm_manager.py autogroup       # Smart connection grouping
+uv run python guac_vm_manager.py test-auth       # Test API authentication
+uv run python guac_vm_manager.py test-network "aa:bb:cc:dd:ee:ff"  # Test network scanning
+uv run python guac_vm_manager.py debug-vms       # Debug VM discovery
+uv run python guac_vm_manager.py interactive     # Full interactive menu
+# Default (no command) runs interactive mode
+```
+uv run python guac_vm_manager.py delete --group "Legacy Servers" --force
+uv run python guac_vm_manager.py delete --all  # ⚠️  DANGER: Deletes everything!
 
-# Test network discovery for specific MAC
-uv run python guac_vm_manager.py test-network "aa:bb:cc:dd:ee:ff"
-
-# Full interactive menu (default if no command)
-uv run python guac_vm_manager.py
+# Other commands
+uv run python guac_vm_manager.py autogroup       # Smart connection grouping
+uv run python guac_vm_manager.py test-auth       # Test API authentication
+uv run python guac_vm_manager.py test-network "aa:bb:cc:dd:ee:ff"  # Test network scanning
+uv run python guac_vm_manager.py debug-vms       # Debug VM discovery
+uv run python guac_vm_manager.py interactive     # Full interactive menu
+# Default (no command) runs interactive mode
 ```
 
 ### Workflow Examples

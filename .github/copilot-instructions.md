@@ -1,8 +1,31 @@
 # Proxmox-Guacamole Sync - AI Coding Agent Instructions
 
-## Project Architecture
+## Project Arch### Main Usage Patterns
+```bash
+# Modern Typer CLI Commands - All interactive menu options available as direct commands
+# Supports partial options (missing required fields prompt for input) and regex pattern matching
+uv run python guac_vm_manager.py add             # Interactive VM selection menu with numbered options
+uv run python guac_vm_manager.py add --vm-id 100 # Prompts for missing node, hostname, etc.
+uv run python guac_vm_manager.py auto            # Process all VMs with credentials
+uv run python guac_vm_manager.py auto --force    # Force recreate all connections
+uv run python guac_vm_manager.py list            # List existing connections
+uv run python guac_vm_manager.py list --connection ".*-admin-.*" --protocol rdp  # Regex filtering
+uv run python guac_vm_manager.py edit            # Edit and delete existing connections
+uv run python guac_vm_manager.py edit --connection "vm-.*" --hostname 192.168.1.100  # Bulk regex edit
+uv run python guac_vm_manager.py delete          # Delete connections and groups only
+uv run python guac_vm_manager.py delete --connection "temp-.*" --force  # Regex pattern deletion
+uv run python guac_vm_manager.py autogroup       # Smart connection grouping
+uv run python guac_vm_manager.py add-external    # Add non-Proxmox host
+uv run python guac_vm_manager.py add-external --hostname server.com  # Prompts for missing fields
+uv run python guac_vm_manager.py test-auth       # Test API authentication
+uv run python guac_vm_manager.py test-network "MAC"  # Test network scanning
+uv run python guac_vm_manager.py debug-vms       # Debug VM discovery
+uv run python guac_vm_manager.py interactive     # Full interactive menu
+# Default (no command) runs interactive mode
+```his is a single-file Python tool (`guac_vm_manager.py`) that bridges Proxmox VE and Apache Guacamole by parsing VM credentials from Proxmox VM notes and automatically creating remote connections (RDP/VNC/SSH) in Guacamole.
 
-This is a single-file Python tool (`guac_vm_manager.py`) that bridges Proxmox VE and Apache Guacamole by parsing VM credentials from Proxmox VM notes and automatically creating remote connections (RDP/VNC/SSH) in Guacamole.
+### Repository UI/Text Policy
+```his is a single-file Python tool (`guac_vm_manager.py`) that bridges Proxmox VE and Apache Guacamole by parsing VM credentials from Proxmox VM notes and automatically creating remote connections (RDP/VNC/SSH) in Guacamole.
 
 ### Repository UI/Text Policy
 - Emojis are NOT allowed in code or documentation output. Use neutral Unicode symbols when needed (examples: `●`, `○`, `*`, `✔`, `⚠`). This repository enforces a strict no-emoji rule for terminal interfaces, logs, and docs.
@@ -72,15 +95,46 @@ uv run python guac_vm_manager.py --test-network "aa:bb:cc:dd:ee:ff"  # Test netw
 
 ### Main Usage Patterns
 ```bash
-# Modern Typer CLI Commands
-uv run python guac_vm_manager.py add             # Interactive VM selection
+# Modern Typer CLI Commands - All interactive menu options available as direct commands
+# Supports partial options (missing required fields prompt for input) and regex pattern matching
+uv run python guac_vm_manager.py add             # Interactive VM selection menu with numbered options
+uv run python guac_vm_manager.py add --vm-id 100 # Prompts for missing node, hostname, etc.
 uv run python guac_vm_manager.py auto            # Process all VMs with credentials
 uv run python guac_vm_manager.py auto --force    # Force recreate all connections
 uv run python guac_vm_manager.py list            # List existing connections
+uv run python guac_vm_manager.py list --connection ".*-admin-.*" --protocol rdp  # Regex filtering
+uv run python guac_vm_manager.py edit            # Edit and delete existing connections
+uv run python guac_vm_manager.py edit --connection "vm-.*" --hostname 192.168.1.100  # Bulk regex edit
+uv run python guac_vm_manager.py delete          # Delete connections and groups only
+uv run python guac_vm_manager.py delete --connection "temp-.*" --force  # Regex pattern deletion
+uv run python guac_vm_manager.py autogroup       # Smart connection grouping
+uv run python guac_vm_manager.py add-external    # Add non-Proxmox host
+uv run python guac_vm_manager.py add-external --hostname server.com  # Prompts for missing fields
 uv run python guac_vm_manager.py test-auth       # Test API authentication
+uv run python guac_vm_manager.py test-network "MAC"  # Test network scanning
+uv run python guac_vm_manager.py debug-vms       # Debug VM discovery
 uv run python guac_vm_manager.py interactive     # Full interactive menu
 # Default (no command) runs interactive mode
 ```
+
+### Key CLI Enhancements
+
+**Partial Option Support:**
+- Commands accept incomplete options and prompt for missing required fields
+- Example: `add --vm-id 100` prompts for node, hostname, etc. instead of failing
+- Enables better automation workflows with user-friendly fallbacks
+
+**Advanced Pattern Matching:**
+- Regex support for connection, VM, and group name filtering
+- Comma-separated multiple patterns: `"pattern1,pattern2,pattern3"`
+- Wildcard support: `"*-admin-*"` or `"web-server-*"`
+- Bulk operations on matching connections/groups
+
+**New Command Options:**
+- `list --connection ".*-admin-.*" --protocol rdp --status ok`
+- `edit --connection "vm-.*" --hostname new-server.com --force`
+- `delete --connection "temp-.*" --group "Legacy.*" --force`
+- `add-external --hostname server.com` (prompts for missing fields)
 
 ### VM State Management
 - **Auto-Start**: Automatically starts stopped VMs during setup for IP detection
@@ -126,8 +180,6 @@ Uses **progressive fallback** rather than strict validation:
 - **Wake-on-LAN**: Direct UDP broadcast to wake powered-off VMs before connecting
 
 ## Testing Structure
-- `tests/unit/`: Mock-based unit tests for API classes
-- `tests/integration/`: End-to-end workflow tests
-- `pytest.ini`: Empty (using defaults)
+- **Not Done yet**^
 
 When modifying this codebase, maintain the single-file architecture and focus on the credential parsing logic as the core differentiator.

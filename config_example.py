@@ -38,6 +38,11 @@ class Config:
     GUAC_PASSWORD = "your-guac-admin-password"
     GUAC_DATA_SOURCE = "mysql"  # or "postgresql", "sqlserver" 
     
+    # Auto-discovered working API endpoints (populated automatically)
+    # These are determined on first run and saved to avoid endpoint discovery
+    GUAC_WORKING_BASE_PATH = None  # "/api" or "/guacamole/api" 
+    GUAC_WORKING_DATA_SOURCE = None  # "mysql", "postgresql", etc.
+    
     # Proxmox Configuration
     PROXMOX_HOST = "192.168.1.100"  # Your Proxmox server IP
     PROXMOX_PORT = 8006
