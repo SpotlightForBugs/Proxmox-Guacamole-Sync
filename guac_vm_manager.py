@@ -3900,9 +3900,8 @@ def interactive_add_vm(
                     if manual_ip:
                         selected_hostname = manual_ip
                         break
-                    else:
-                        print("Hostname cannot be empty")
-                        continue
+                    print("Hostname cannot be empty")
+                    continue
                 if ip_choice.isdigit():
                     idx = int(ip_choice) - 1
                     if 0 <= idx < len(ip_options):
@@ -3995,9 +3994,8 @@ def interactive_add_vm(
                 if WakeOnLan.validate_mac_address(manual_mac):
                     selected_mac = manual_mac
                     break
-                else:
-                    print("Invalid MAC address format")
-                    continue
+                print("Invalid MAC address format")
+                continue
             if mac_choice.isdigit():
                 idx = int(mac_choice) - 1
                 if 0 <= idx < len(mac_candidates):
@@ -5715,11 +5713,10 @@ def delete_connections_interactive():
                     selected_items = [item for item in items if item["selected"]]
                     if selected_items:
                         break
-                    else:
-                        console.print(
-                            "\n[yellow]No items selected for deletion.[/yellow]"
-                        )
-                        input("Press Enter to continue...")
+                    console.print(
+                        "\n[yellow]No items selected for deletion.[/yellow]"
+                    )
+                    input("Press Enter to continue...")
                 elif ch == "\x03":  # Ctrl+C
                     console.print("\n[yellow]Delete cancelled.[/yellow]")
                     return True
