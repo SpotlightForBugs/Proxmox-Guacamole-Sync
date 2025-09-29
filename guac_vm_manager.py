@@ -19,7 +19,6 @@ if len(sys.argv) > 1 and sys.argv[1] in help_options:
 import requests
 import os
 import socket
-import struct
 import json
 import urllib3
 from urllib.parse import urljoin
@@ -4589,12 +4588,6 @@ def interactive_add_vm(
     max_workers = min(
         8, max(1, len(connections_to_create))
     )  # cap to keep UI responsive
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from rich.live import Live
-    from rich.progress import (
-        BarColumn,
-        TimeElapsedColumn,
-    )
 
     def create_one(conn: Dict) -> Tuple[str, Optional[str], Optional[str]]:
         """Worker: create a single connection; returns (name, identifier, error)."""
@@ -7691,8 +7684,6 @@ def delete_connections_cmd(
 @app.command("interactive")
 def interactive_menu():
     """Interactive menu mode"""
-    from rich.columns import Columns
-    from rich.align import Align
 
     if (
         os.environ.get("PYTEST_CURRENT_TEST")
