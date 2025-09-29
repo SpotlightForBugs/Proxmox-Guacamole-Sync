@@ -1968,7 +1968,8 @@ class ProxmoxAPI:
 
         return node_ips
 
-    def _notes_contains_unencrypted_passwords(self, notes: str) -> bool:
+    @staticmethod
+    def _notes_contains_unencrypted_passwords(notes: str) -> bool:
         """Return True if notes contain unencrypted password patterns (pass: or password:) without an encrypted_password: entry."""
         if not notes:
             return False
@@ -2346,7 +2347,8 @@ class ProxmoxAPI:
         parsed = self.parse_credentials_from_notes(notes)
         return len(parsed) > 0
 
-    def _parse_credential_line(self, line: str) -> Dict[str, str]:
+    @staticmethod
+    def _parse_credential_line(line: str) -> Dict[str, str]:
         """Parse a credential line with flexible parameter order"""
         params = {}
 
