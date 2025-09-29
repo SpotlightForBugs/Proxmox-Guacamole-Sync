@@ -19,7 +19,6 @@ if len(sys.argv) > 1 and sys.argv[1] in help_options:
 import requests
 import os
 import socket
-import struct
 import json
 import urllib3
 from urllib.parse import urljoin
@@ -39,6 +38,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn
+
 # Pylint: some imports intentionally live inside functions to avoid heavy startup
 # or circular imports. Also some 'pass' statements are used intentionally to
 # silence non-critical exceptions in probing code paths. Disable the following
@@ -105,7 +105,7 @@ def complete_connection_names(incomplete: str):
                 name for name in names if name.lower().startswith(incomplete.lower())
             ]
     except Exception:
-            return []
+        return []
 
 
 def complete_vm_names(incomplete: str):
@@ -123,7 +123,7 @@ def complete_vm_names(incomplete: str):
                 name for name in all_vms if name.lower().startswith(incomplete.lower())
             ]
     except Exception:
-            return []
+        return []
 
 
 def complete_protocols(incomplete: str):
@@ -184,7 +184,7 @@ def get_connection_suggestions():
                 if conn.get("name")
             ]
     except Exception:
-            return []
+        return []
 
 
 def interactive_menu_with_navigation(
@@ -651,7 +651,7 @@ class GuacamoleAPI:
                 )
 
             # Update GUAC_WORKING_DATA_SOURCE
-            if f"GUAC_WORKING_DATA_SOURCE =" not in content:
+            if "GUAC_WORKING_DATA_SOURCE =" not in content:
                 # Add it after GUAC_WORKING_BASE_PATH
                 content = content.replace(
                     'GUAC_WORKING_BASE_PATH = "/api"# "/api" or "/guacamole/api"',
@@ -667,7 +667,7 @@ class GuacamoleAPI:
                 # Update the comment to indicate it was auto-corrected
                 content = re.sub(
                     rf'(GUAC_DATA_SOURCE\s*=\s*"{self._working_data_source}")(\s*#.*)?',
-                    rf"\1  # Auto-corrected to match server",
+                    "\1  # Auto-corrected to match server",
                     content,
                 )
 
@@ -676,7 +676,7 @@ class GuacamoleAPI:
                 f.write(content)
 
             console.print(
-                f"[green]✓ Saved discovered endpoints to config for faster future runs[/green]"
+                "[green]✓ Saved discovered endpoints to config for faster future runs[/green]"
             )
             self._config_saved = True  # Mark that we've saved this session
 
@@ -833,12 +833,11 @@ class GuacamoleAPI:
                             return True
                         # Silent failure, try next endpoint
                         continue
-                    elif response.status_code == 404:
+                    if response.status_code == 404:
                         # Expected for installations without /guacamole prefix
                         continue
-                    else:
-                        # Silent failure, try next endpoint
-                        continue
+                    # Silent failure, try next endpoint
+                    continue
 
                 except requests.exceptions.RequestException:
                     # Silent failure, try next endpoint
@@ -886,12 +885,11 @@ class GuacamoleAPI:
                                 return True
                             # Silent failure, try next endpoint
                             continue
-                        elif response.status_code == 404:
+                        if response.status_code == 404:
                             # Expected for installations without /guacamole prefix
                             continue
-                        else:
-                            # Silent failure, try next endpoint
-                            continue
+                        # Silent failure, try next endpoint
+                        continue
 
                     except requests.exceptions.RequestException:
                         # Silent failure, try next endpoint
@@ -932,9 +930,8 @@ class GuacamoleAPI:
 
     def get_connections(self) -> Dict:
         """Get list of existing connections"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return {}
+        if not self.auth_token and not self.authenticate():
+            return {}
 
         for connections_url in self._build_api_endpoints("connections"):
             try:
@@ -953,10 +950,9 @@ class GuacamoleAPI:
                     return response.json()
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to get connections from {connections_url}: {response.status_code}"
-                    )
+                print(
+                    f"Failed to get connections from {connections_url}: {response.status_code}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Request failed for {connections_url}: {e}")
                 continue
@@ -966,9 +962,8 @@ class GuacamoleAPI:
 
     def get_connection_details(self, connection_id: str) -> Dict:
         """Get detailed connection parameters for a specific connection"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return {}
+        if not self.auth_token and not self.authenticate():
+            return {}
 
         # Use cached working base path if available, otherwise try all paths
         working_data_source = getattr(self, "_working_data_source", None)
@@ -1011,10 +1006,9 @@ class GuacamoleAPI:
                     return connection_info
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to get connection details from {detail_url}: {response.status_code}"
-                    )
+                print(
+                    f"Failed to get connection details from {detail_url}: {response.status_code}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Request failed: {e}")
                 continue
@@ -1031,9 +1025,8 @@ class GuacamoleAPI:
 
     def get_connection_groups(self) -> Dict:
         """Get list of existing connection groups"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return {}
+        if not self.auth_token and not self.authenticate():
+            return {}
 
         for groups_url in self._build_api_endpoints("connectionGroups"):
             try:
@@ -1042,10 +1035,9 @@ class GuacamoleAPI:
                     return response.json()
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to get connection groups from {groups_url}: {response.status_code}"
-                    )
+                print(
+                    f"Failed to get connection groups from {groups_url}: {response.status_code}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Request failed for {groups_url}: {e}")
                 continue
@@ -1303,9 +1295,8 @@ class GuacamoleAPI:
                     return True
                 if response.status_code == 404:
                     continue
-                else:
-                    # Try alternative approach - some Guacamole versions need different method
-                    continue
+                # Try alternative approach - some Guacamole versions need different method
+                continue
             except requests.exceptions.RequestException as e:
                 continue
 
@@ -1337,8 +1328,7 @@ class GuacamoleAPI:
                     return True
                 if response.status_code == 404:
                     continue
-                else:
-                    continue
+                continue
             except requests.exceptions.RequestException as e:
                 continue
 
@@ -1393,8 +1383,7 @@ class GuacamoleAPI:
                     return True
                 if response.status_code == 404:
                     continue
-                else:
-                    continue
+                continue
             except requests.exceptions.RequestException as e:
                 continue
 
@@ -1434,13 +1423,12 @@ class GuacamoleAPI:
                     if (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
-                    ):
-                        if "/session/data/" in endpoint:
-                            parts = endpoint.split("/session/data/")
-                            if len(parts) > 1:
-                                data_source_part = parts[1].split("/")[0]
-                                self._working_data_source = data_source_part
-                                self._save_working_endpoints_to_config()
+                    ) and "/session/data/" in endpoint:
+                        parts = endpoint.split("/session/data/")
+                        if len(parts) > 1:
+                            data_source_part = parts[1].split("/")[0]
+                            self._working_data_source = data_source_part
+                            self._save_working_endpoints_to_config()
                     data = response.json()
                     identifier = data.get("identifier")
                     print(f"Created connection group '{name}' (ID: {identifier})")
@@ -1467,8 +1455,7 @@ class GuacamoleAPI:
                     return None
                 if response.status_code == 404:
                     continue
-                else:
-                    print(f"Failed to create group: {response.status_code}")
+                print(f"Failed to create group: {response.status_code}")
             except requests.exceptions.RequestException as e:
                 print(f"Request failed for group creation: {e}")
                 continue
@@ -1570,9 +1557,8 @@ class GuacamoleAPI:
         wol_settings: Optional[Dict[str, str]] = None,
     ) -> Optional[str]:
         """Create RDP connection in Guacamole"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return None
+        if not self.auth_token and not self.authenticate():
+            return None
 
         connection_data = {
             "name": name,
@@ -1640,13 +1626,12 @@ class GuacamoleAPI:
                     if (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
-                    ):
-                        if "/session/data/" in endpoint:
-                            parts = endpoint.split("/session/data/")
-                            if len(parts) > 1:
-                                data_source_part = parts[1].split("/")[0]
-                                self._working_data_source = data_source_part
-                                self._save_working_endpoints_to_config()
+                    ) and "/session/data/" in endpoint:
+                        parts = endpoint.split("/session/data/")
+                        if len(parts) > 1:
+                            data_source_part = parts[1].split("/")[0]
+                            self._working_data_source = data_source_part
+                            self._save_working_endpoints_to_config()
                     data = response.json()
                     identifier = data.get("identifier")
                     print(
@@ -1655,10 +1640,9 @@ class GuacamoleAPI:
                     return identifier
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to create RDP connection via {endpoint}: {response.status_code} {response.text}"
-                    )
+                print(
+                    f"Failed to create RDP connection via {endpoint}: {response.status_code} {response.text}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Failed to create RDP connection via {endpoint}: {e}")
                 if hasattr(e, "response") and e.response is not None:
@@ -1680,9 +1664,8 @@ class GuacamoleAPI:
         vnc_settings: Optional[Dict[str, str]] = None,
     ) -> Optional[str]:
         """Create VNC connection in Guacamole"""
-        if not self.auth_token:
-            if not self.authenticate():
-                return None
+        if not self.auth_token and not self.authenticate():
+            return None
 
         # Default VNC parameters with enhanced options
         vnc_params = {
@@ -1754,13 +1737,12 @@ class GuacamoleAPI:
                     if (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
-                    ):
-                        if "/session/data/" in endpoint:
-                            parts = endpoint.split("/session/data/")
-                            if len(parts) > 1:
-                                data_source_part = parts[1].split("/")[0]
-                                self._working_data_source = data_source_part
-                                self._save_working_endpoints_to_config()
+                    ) and "/session/data/" in endpoint:
+                        parts = endpoint.split("/session/data/")
+                        if len(parts) > 1:
+                            data_source_part = parts[1].split("/")[0]
+                            self._working_data_source = data_source_part
+                            self._save_working_endpoints_to_config()
                     data = response.json()
                     identifier = data.get("identifier")
                     print(
@@ -1769,10 +1751,9 @@ class GuacamoleAPI:
                     return identifier
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to create VNC connection via {endpoint}: {response.status_code} {response.text}"
-                    )
+                print(
+                    f"Failed to create VNC connection via {endpoint}: {response.status_code} {response.text}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Failed to create VNC connection via {endpoint}: {e}")
                 if hasattr(e, "response") and e.response is not None:
@@ -1851,13 +1832,12 @@ class GuacamoleAPI:
                     if (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
-                    ):
-                        if "/session/data/" in endpoint:
-                            parts = endpoint.split("/session/data/")
-                            if len(parts) > 1:
-                                data_source_part = parts[1].split("/")[0]
-                                self._working_data_source = data_source_part
-                                self._save_working_endpoints_to_config()
+                    ) and "/session/data/" in endpoint:
+                        parts = endpoint.split("/session/data/")
+                        if len(parts) > 1:
+                            data_source_part = parts[1].split("/")[0]
+                            self._working_data_source = data_source_part
+                            self._save_working_endpoints_to_config()
                     data = response.json()
                     identifier = data.get("identifier")
                     print(
@@ -1866,10 +1846,9 @@ class GuacamoleAPI:
                     return identifier
                 if response.status_code == 404:
                     continue
-                else:
-                    print(
-                        f"Failed to create SSH connection via {endpoint}: {response.status_code} {response.text}"
-                    )
+                print(
+                    f"Failed to create SSH connection via {endpoint}: {response.status_code} {response.text}"
+                )
             except requests.exceptions.RequestException as e:
                 print(f"Failed to create SSH connection via {endpoint}: {e}")
                 if hasattr(e, "response") and e.response is not None:
@@ -1989,7 +1968,8 @@ class ProxmoxAPI:
 
         return node_ips
 
-    def _notes_contains_unencrypted_passwords(self, notes: str) -> bool:
+    @staticmethod
+    def _notes_contains_unencrypted_passwords(notes: str) -> bool:
         """Return True if notes contain unencrypted password patterns (pass: or password:) without an encrypted_password: entry."""
         if not notes:
             return False
@@ -2054,7 +2034,7 @@ class ProxmoxAPI:
                     f"[green]Updated VM {vmid} notes with encrypted passwords[/green]"
                 )
                 return True
-            elif response.status_code == 405:
+            if response.status_code == 405:
                 # Some proxies disallow PUT - try POST with override
                 try:
                     console.print(
@@ -2367,7 +2347,8 @@ class ProxmoxAPI:
         parsed = self.parse_credentials_from_notes(notes)
         return len(parsed) > 0
 
-    def _parse_credential_line(self, line: str) -> Dict[str, str]:
+    @staticmethod
+    def _parse_credential_line(line: str) -> Dict[str, str]:
         """Parse a credential line with flexible parameter order"""
         params = {}
 
@@ -2769,6 +2750,7 @@ class NetworkScanner:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=True,
             )
 
             gateway_match = re.search(r"gateway: (\d+\.\d+\.\d+\.\d+)", result.stdout)
@@ -2791,12 +2773,12 @@ class NetworkScanner:
         try:
             # Try faster arp command first
             result = subprocess.run(
-                ["arp", "-an"], capture_output=True, text=True, timeout=2
+                ["arp", "-an"], capture_output=True, text=True, timeout=2, check=True
             )
             if result.returncode != 0:
                 # Fallback to regular arp -a
                 result = subprocess.run(
-                    ["arp", "-a"], capture_output=True, text=True, timeout=3
+                    ["arp", "-a"], capture_output=True, text=True, timeout=3, check=True
                 )
 
             for line in result.stdout.split("\n"):
@@ -2919,10 +2901,10 @@ class NetworkScanner:
                 return entry
 
         print(f" MAC address {target_mac} not found on local network")
-        print(f"   This could mean:")
-        print(f"   - VM is stopped or not responding to network traffic")
-        print(f"   - VM is on a different network segment")
-        print(f"   - MAC address in Proxmox config doesn't match actual VM")
+        print("   This could mean:")
+        print("   - VM is stopped or not responding to network traffic")
+        print("   - VM is on a different network segment")
+        print("   - MAC address in Proxmox config doesn't match actual VM")
         return None
 
     @staticmethod
@@ -2940,6 +2922,7 @@ class NetworkScanner:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=2,
+                check=True,
             )
             entries = NetworkScanner.scan_arp_table()
             for e in entries:
@@ -2948,8 +2931,6 @@ class NetworkScanner:
         except Exception:
             return None
         return None
-
-        
 
 
 class WakeOnLan:
@@ -3367,7 +3348,7 @@ def interactive_add_vm(
 
         if selection == "0":
             return False
-        elif selection.isdigit():
+        if selection.isdigit():
             index = int(selection) - 1
             if 0 <= index < len(vms):
                 selected_vm = vms[index]
@@ -3636,9 +3617,8 @@ def interactive_add_vm(
                         except Exception as e:
                             print(f"Edit error: {e}")
                         continue
-                    else:
-                        print("Please choose a / i / e")
-                        continue
+                    print("Please choose a / i / e")
+                    continue
         else:
             console.print(
                 "\n[yellow]Warning: No credentials found in VM notes[/yellow]"
@@ -3724,29 +3704,32 @@ def interactive_add_vm(
                     .lower()
                 )
 
-            if start_choice == "" or start_choice in ("y", "yes"):
-                if vm_node and vm_id and proxmox_api.start_vm(vm_node, vm_id):
-                    vm_was_started = True
-                    print(
-                        " Waiting 30 seconds for VM to boot and connect to network..."
-                    )
-                    time.sleep(30)
+            if (
+                start_choice == ""
+                or start_choice in ("y", "yes")
+                and vm_node
+                and vm_id
+                and proxmox_api.start_vm(vm_node, vm_id)
+            ):
+                vm_was_started = True
+                print(" Waiting 30 seconds for VM to boot and connect to network...")
+                time.sleep(30)
 
-                    # Try network scan again with all MACs
-                    print(" Scanning for VM on network after startup...")
-                    for mac in vm_macs:
-                        network_scan_result = NetworkScanner.find_mac_on_network(mac)
-                        if network_scan_result:
-                            found_mac = mac
-                            print(
-                                f" Found MAC {mac} on network at IP {network_scan_result['ip']} after startup"
-                            )
-                            break
-
-                    if not network_scan_result:
+                # Try network scan again with all MACs
+                print(" Scanning for VM on network after startup...")
+                for mac in vm_macs:
+                    network_scan_result = NetworkScanner.find_mac_on_network(mac)
+                    if network_scan_result:
+                        found_mac = mac
                         print(
-                            "  VM started but not yet detected on network (may need more time to boot)"
+                            f" Found MAC {mac} on network at IP {network_scan_result['ip']} after startup"
                         )
+                        break
+
+                if not network_scan_result:
+                    print(
+                        "  VM started but not yet detected on network (may need more time to boot)"
+                    )
         elif not network_scan_result and not is_external_host:
             # VM is running but not found on network - this might be normal for some network configs
             print(f"  VM is {original_status} but not detected on network")
@@ -3900,9 +3883,8 @@ def interactive_add_vm(
                     if manual_ip:
                         selected_hostname = manual_ip
                         break
-                    else:
-                        print("Hostname cannot be empty")
-                        continue
+                    print("Hostname cannot be empty")
+                    continue
                 if ip_choice.isdigit():
                     idx = int(ip_choice) - 1
                     if 0 <= idx < len(ip_options):
@@ -3921,15 +3903,18 @@ def interactive_add_vm(
 
         # Update parsed credentials with actual IP if we have it (Proxmox VMs only)
         if (
-            selected_hostname
-            and selected_hostname != "unknown"
-            and parsed_credentials
-            and not is_external_host
+            (
+                selected_hostname
+                and selected_hostname != "unknown"
+                and parsed_credentials
+                and not is_external_host
+            )
+            and vm_id is not None
+            and vm_node
         ):
-            if vm_id is not None and vm_node:
-                parsed_credentials = proxmox_api.parse_credentials_from_notes(
-                    vm_notes, vm_name, str(vm_id), vm_node, selected_hostname
-                )
+            parsed_credentials = proxmox_api.parse_credentials_from_notes(
+                vm_notes, vm_name, str(vm_id), vm_node, selected_hostname
+            )
     else:
         if not is_external_host:
             # No IP options found - provide helpful guidance (Proxmox only)
@@ -3995,9 +3980,8 @@ def interactive_add_vm(
                 if WakeOnLan.validate_mac_address(manual_mac):
                     selected_mac = manual_mac
                     break
-                else:
-                    print("Invalid MAC address format")
-                    continue
+                print("Invalid MAC address format")
+                continue
             if mac_choice.isdigit():
                 idx = int(mac_choice) - 1
                 if 0 <= idx < len(mac_candidates):
@@ -4031,12 +4015,11 @@ def interactive_add_vm(
             .strip()
             .lower()
         )
-        if dp:
-            if dp not in ("rdp", "vnc", "ssh"):
-                console.print(
-                    "[yellow]Warning: Invalid protocol. Protocols must be specified per account.[/yellow]"
-                )
-                dp = None
+        if dp and dp not in ("rdp", "vnc", "ssh"):
+            console.print(
+                "[yellow]Warning: Invalid protocol. Protocols must be specified per account.[/yellow]"
+            )
+            dp = None
         default_protocol = dp or None
 
         if default_protocol == "rdp":
@@ -4154,10 +4137,6 @@ def interactive_add_vm(
             print(
                 f"  {i+1}. {cred['connection_name']} ({cred['username']}, {protocol}:{port_value})"
             )
-
-        if not auto_approve and parsed_credentials:
-            # Old confirm replaced by earlier apply prompt; keep backward compat if needed
-            pass
 
     # Manual credential entry if no parsed credentials or user declined
     if not parsed_credentials:
@@ -4393,43 +4372,42 @@ def interactive_add_vm(
                         tbl.add_row(conn["name"], st, res)
                     return tbl
 
-                with Live(build_table(), console=console, refresh_per_second=20):
-                    with progress:
-                        if disable_threads or len(updates_needed) == 1:
-                            progress.update(
-                                task_id, description="Updating (sequential mode)..."
+                with Live(
+                    build_table(), console=console, refresh_per_second=20
+                ), progress:
+                    if disable_threads or len(updates_needed) == 1:
+                        progress.update(
+                            task_id, description="Updating (sequential mode)..."
+                        )
+                        for entry in updates_needed:
+                            conn, _id = entry
+                            update_status[conn["name"]] = ("running", "")
+                            name, err = do_update(entry)
+                            update_status[name] = (
+                                ("done", "OK")
+                                if not err
+                                else ("error", err.split("\n")[0][:60])
                             )
-                            for entry in updates_needed:
-                                conn, _id = entry
-                                update_status[conn["name"]] = ("running", "")
-                                name, err = do_update(entry)
+                            progress.advance(task_id)
+                    else:
+                        max_workers = min(8, len(updates_needed))
+                        progress.update(
+                            task_id,
+                            description=f"Updating with {max_workers} workers...",
+                        )
+                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                            future_map = {
+                                executor.submit(do_update, entry): entry
+                                for entry in updates_needed
+                            }
+                            for fut in as_completed(future_map):
+                                name, err = fut.result()
                                 update_status[name] = (
                                     ("done", "OK")
                                     if not err
                                     else ("error", err.split("\n")[0][:60])
                                 )
                                 progress.advance(task_id)
-                        else:
-                            max_workers = min(8, len(updates_needed))
-                            progress.update(
-                                task_id,
-                                description=f"Updating with {max_workers} workers...",
-                            )
-                            with ThreadPoolExecutor(
-                                max_workers=max_workers
-                            ) as executor:
-                                future_map = {
-                                    executor.submit(do_update, entry): entry
-                                    for entry in updates_needed
-                                }
-                                for fut in as_completed(future_map):
-                                    name, err = fut.result()
-                                    update_status[name] = (
-                                        ("done", "OK")
-                                        if not err
-                                        else ("error", err.split("\n")[0][:60])
-                                    )
-                                    progress.advance(task_id)
             elif update_choice in ("r", "recreate"):
                 for conn, identifier in updates_needed:
                     print(f"Recreating: deleting '{conn['name']}' first")
@@ -4550,41 +4528,40 @@ def interactive_add_vm(
                     tbl.add_row(conn["name"], st, res)
                 return tbl
 
-            with Live(build_table(), console=console, refresh_per_second=20):
-                with progress:
-                    if disable_threads or len(updates_needed) == 1:
-                        progress.update(
-                            task_id, description="Updating (sequential mode)..."
+            with Live(build_table(), console=console, refresh_per_second=20), progress:
+                if disable_threads or len(updates_needed) == 1:
+                    progress.update(
+                        task_id, description="Updating (sequential mode)..."
+                    )
+                    for entry in updates_needed:
+                        conn, _id = entry
+                        update_status[conn["name"]] = ("running", "")
+                        name, err = do_update(entry)
+                        update_status[name] = (
+                            ("done", "OK")
+                            if not err
+                            else ("error", err.split("\n")[0][:60])
                         )
-                        for entry in updates_needed:
-                            conn, _id = entry
-                            update_status[conn["name"]] = ("running", "")
-                            name, err = do_update(entry)
+                        progress.advance(task_id)
+                else:
+                    max_workers = min(8, len(updates_needed))
+                    progress.update(
+                        task_id,
+                        description=f"Updating with {max_workers} workers...",
+                    )
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        future_map = {
+                            executor.submit(do_update, entry): entry
+                            for entry in updates_needed
+                        }
+                        for fut in as_completed(future_map):
+                            name, err = fut.result()
                             update_status[name] = (
                                 ("done", "OK")
                                 if not err
                                 else ("error", err.split("\n")[0][:60])
                             )
                             progress.advance(task_id)
-                    else:
-                        max_workers = min(8, len(updates_needed))
-                        progress.update(
-                            task_id,
-                            description=f"Updating with {max_workers} workers...",
-                        )
-                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                            future_map = {
-                                executor.submit(do_update, entry): entry
-                                for entry in updates_needed
-                            }
-                            for fut in as_completed(future_map):
-                                name, err = fut.result()
-                                update_status[name] = (
-                                    ("done", "OK")
-                                    if not err
-                                    else ("error", err.split("\n")[0][:60])
-                                )
-                                progress.advance(task_id)
 
     # Handle duplicates (unchanged connections)
     if duplicates:
@@ -4605,12 +4582,6 @@ def interactive_add_vm(
     max_workers = min(
         8, max(1, len(connections_to_create))
     )  # cap to keep UI responsive
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from rich.live import Live
-    from rich.progress import (
-        BarColumn,
-        TimeElapsedColumn,
-    )
 
     def create_one(conn: Dict) -> Tuple[str, Optional[str], Optional[str]]:
         """Worker: create a single connection; returns (name, identifier, error)."""
@@ -5097,9 +5068,12 @@ def list_connections(
                     should_include = False
 
         # Filter by protocol
-        if should_include and filter_protocol:
-            if protocol.lower() != filter_protocol.lower():
-                should_include = False
+        if (
+            should_include
+            and filter_protocol
+            and protocol.lower() != filter_protocol.lower()
+        ):
+            should_include = False
 
         # Filter by status
         if should_include and filter_status:
@@ -5379,7 +5353,7 @@ def analyze_connections_for_grouping(connection_details):
         name_lower = conn["name"].lower()
         hostname_lower = conn["params"].get("hostname", "").lower()
 
-        for keyword in environment_groups.keys():
+        for keyword in environment_groups:
             if keyword in name_lower or keyword in hostname_lower:
                 environment_groups[keyword].append(conn)
                 break
@@ -5715,11 +5689,8 @@ def delete_connections_interactive():
                     selected_items = [item for item in items if item["selected"]]
                     if selected_items:
                         break
-                    else:
-                        console.print(
-                            "\n[yellow]No items selected for deletion.[/yellow]"
-                        )
-                        input("Press Enter to continue...")
+                    console.print("\n[yellow]No items selected for deletion.[/yellow]")
+                    input("Press Enter to continue...")
                 elif ch == "\x03":  # Ctrl+C
                     console.print("\n[yellow]Delete cancelled.[/yellow]")
                     return True
@@ -5948,13 +5919,12 @@ def edit_connections_interactive():
 
         if action_choice == "e":
             return edit_single_connection(guac_api, selected_item)
-        elif action_choice == "d":
+        if action_choice == "d":
             return delete_single_item(guac_api, selected_item)
-        else:
-            console.print("[yellow]Action cancelled.[/yellow]")
-            return True
+        console.print("[yellow]Action cancelled.[/yellow]")
+        return True
 
-    elif selected_item["type"] == "group":
+    if selected_item["type"] == "group":
         action_choice = (
             console.input(
                 "[bold]Available actions:[/bold]\n"
@@ -5969,11 +5939,10 @@ def edit_connections_interactive():
 
         if action_choice == "r":
             return rename_single_group(guac_api, selected_item)
-        elif action_choice == "d":
+        if action_choice == "d":
             return delete_single_item(guac_api, selected_item)
-        else:
-            console.print("[yellow]Action cancelled.[/yellow]")
-            return True
+        console.print("[yellow]Action cancelled.[/yellow]")
+        return True
 
     return True
 
@@ -6080,13 +6049,11 @@ def edit_single_connection(guac_api, item):
     try:
         connections = guac_api.get_connections()
         existing_hostnames = list(
-            set(
-                [
-                    conn.get("parameters", {}).get("hostname", "")
-                    for conn in connections.values()
-                    if conn.get("parameters", {}).get("hostname")
-                ]
-            )
+            {
+                conn.get("parameters", {}).get("hostname", "")
+                for conn in connections.values()
+                if conn.get("parameters", {}).get("hostname")
+            }
         )
         if pve_hostname:
             existing_hostnames.append(pve_hostname)
@@ -6159,7 +6126,7 @@ def edit_single_connection(guac_api, item):
         new_password = console.input("Password (optional): ").strip()
 
     # Show confirmation
-    console.print(f"\n[bold]Review changes:[/bold]")
+    console.print("\n[bold]Review changes:[/bold]")
     console.print(f"Name: {current_name} -> [cyan]{new_name}[/cyan]")
     console.print(f"Hostname: {current_hostname} -> [cyan]{new_hostname}[/cyan]")
     console.print(f"Port: {current_port} -> [cyan]{new_port}[/cyan]")
@@ -6168,7 +6135,7 @@ def edit_single_connection(guac_api, item):
         f"Password: {'Updated' if new_password != current_password else 'Unchanged'}"
     )
 
-    confirm = console.input(f"\nSave changes? (y/N): ").strip().lower()
+    confirm = console.input("\nSave changes? (y/N): ").strip().lower()
 
     if confirm == "y":
         try:
@@ -6235,11 +6202,11 @@ def rename_single_group(guac_api, item):
 
 def delete_single_item(guac_api, item):
     """Delete a single connection or group"""
-    console.print(f"\n[red bold]⚠ CONFIRM DELETION ⚠[/red bold]")
+    console.print("\n[red bold]⚠ CONFIRM DELETION ⚠[/red bold]")
     console.print(f"\nThe following {item['type']} will be permanently deleted:")
     console.print(f"  • {item['display']}")
 
-    confirm = console.input(f"\nType 'DELETE' to confirm deletion: ").strip()
+    confirm = console.input("\nType 'DELETE' to confirm deletion: ").strip()
 
     if confirm != "DELETE":
         console.print(
@@ -6797,9 +6764,8 @@ def edit_connection_direct(
             f"[green]✓ Successfully updated connection: {connection_name}[/green]"
         )
         return True
-    else:
-        console.print(f"[red]✗ Failed to update connection: {connection_name}[/red]")
-        return False
+    console.print(f"[red]✗ Failed to update connection: {connection_name}[/red]")
+    return False
 
 
 def delete_connections_direct(
@@ -6865,7 +6831,7 @@ def delete_connections_direct(
         for item in items_to_delete:
             console.print(f"  • {item['type'].title()}: {item['name']}")
 
-        confirm = input(f"\nType 'DELETE' to confirm: ").strip()
+        confirm = input("\nType 'DELETE' to confirm: ").strip()
         if confirm != "DELETE":
             console.print("[yellow]Deletion cancelled[/yellow]")
             return False
@@ -6962,7 +6928,7 @@ def edit_connections_by_pattern(
         for conn_id, conn in matching_connections:
             console.print(f"  • {conn.get('name', 'N/A')}")
 
-        console.print(f"\n[bold]Changes to apply:[/bold]")
+        console.print("\n[bold]Changes to apply:[/bold]")
         if new_hostname is not None:
             console.print(f"  Hostname: -> {new_hostname}")
         if new_username is not None:
@@ -7115,7 +7081,7 @@ def delete_connections_by_pattern(
         for item in items_to_delete:
             console.print(f"  • {item['type'].title()}: {item['name']}")
 
-        confirm = input(f"\nType 'DELETE' to confirm: ").strip()
+        confirm = input("\nType 'DELETE' to confirm: ").strip()
         if confirm != "DELETE":
             console.print("[yellow]Deletion cancelled[/yellow]")
             return False
@@ -7710,8 +7676,6 @@ def delete_connections_cmd(
 @app.command("interactive")
 def interactive_menu():
     """Interactive menu mode"""
-    from rich.columns import Columns
-    from rich.align import Align
 
     if (
         os.environ.get("PYTEST_CURRENT_TEST")
@@ -7877,31 +7841,31 @@ def install_completion_cmd(
 
     # Provide installation instructions based on shell
     if shell == "zsh":
-        console.print(f"\n[green]Add this line to your ~/.zshrc:[/green]")
+        console.print("\n[green]Add this line to your ~/.zshrc:[/green]")
         console.print(
             f"[dim]eval \"$(_{base_name.upper().replace('-', '_')}_COMPLETE=zsh_source uv run python {script_path})\"[/dim]"
         )
-        console.print(f"\n[yellow]Or for this session only, run:[/yellow]")
+        console.print("\n[yellow]Or for this session only, run:[/yellow]")
         console.print(
             f"[dim]eval \"$(_{base_name.upper().replace('-', '_')}_COMPLETE=zsh_source uv run python {script_path})\"[/dim]"
         )
 
     elif shell == "bash":
-        console.print(f"\n[green]Add this line to your ~/.bashrc:[/green]")
+        console.print("\n[green]Add this line to your ~/.bashrc:[/green]")
         console.print(
             f"[dim]eval \"$(_{base_name.upper().replace('-', '_')}_COMPLETE=bash_source uv run python {script_path})\"[/dim]"
         )
-        console.print(f"\n[yellow]Or for this session only, run:[/yellow]")
+        console.print("\n[yellow]Or for this session only, run:[/yellow]")
         console.print(
             f"[dim]eval \"$(_{base_name.upper().replace('-', '_')}_COMPLETE=bash_source uv run python {script_path})\"[/dim]"
         )
 
     elif shell == "fish":
-        console.print(f"\n[green]Add this line to ~/.config/fish/config.fish:[/green]")
+        console.print("\n[green]Add this line to ~/.config/fish/config.fish:[/green]")
         console.print(
             f"[dim]eval (env _{base_name.upper().replace('-', '_')}_COMPLETE=fish_source uv run python {script_path})[/dim]"
         )
-        console.print(f"\n[yellow]Or for this session only, run:[/yellow]")
+        console.print("\n[yellow]Or for this session only, run:[/yellow]")
         console.print(
             f"[dim]eval (env _{base_name.upper().replace('-', '_')}_COMPLETE=fish_source uv run python {script_path})[/dim]"
         )
@@ -7912,7 +7876,7 @@ def install_completion_cmd(
         )
         console.print("Supported shells: bash, zsh, fish")
 
-    console.print(f"\n[blue]ℹ[/blue] After adding the line, reload your shell with:")
+    console.print("\n[blue]ℹ[/blue] After adding the line, reload your shell with:")
     console.print(
         f"[dim]source ~/.{shell}rc[/dim] (for bash/zsh) or restart your terminal"
     )

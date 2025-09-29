@@ -26,18 +26,16 @@ emoji_ranges = [
 EMOJI_RE = re.compile("[" + "".join(emoji_ranges) + "]")
 
 # Whitelist of neutral Unicode symbols allowed by project policy (examples).
-ALLOWED = set(
-    [
-        "●",
-        "○",
-        "*",
-        "✔",
-        "⚠",
-        "!",
-        "★",
-        "✱",
-    ]
-)
+ALLOWED = {
+    "●",
+    "○",
+    "*",
+    "✔",
+    "⚠",
+    "!",
+    "★",
+    "✱",
+}
 
 INCLUDE_EXTS = {"py", "md", "sh", "txt", "yaml", "yml", "json", "ini", "cfg", "toml"}
 SKIP_DIRS = {
