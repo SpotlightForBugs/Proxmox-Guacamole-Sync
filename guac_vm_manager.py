@@ -2949,7 +2949,7 @@ class NetworkScanner:
             return None
         return None
 
-        
+
 
 
 class WakeOnLan:
