@@ -1,5 +1,9 @@
 # Proxmox-Guacamole Sync
 
+<div align="center">
+  <img src="assets/logo.png" alt="Proxmox-Guacamole Sync Logo" width="400">
+</div>
+
 [![DeepSource](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync.svg/?label=active+issues&show_trend=true&token=ve86Yayt5stmo_wDrIby5Vwj)](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync/)
 
 [![DeepSource](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync.svg/?label=resolved+issues&show_trend=true&token=ve86Yayt5stmo_wDrIby5Vwj)](https://app.deepsource.com/gh/SpotlightForBugs/Proxmox-Guacamole-Sync/)
