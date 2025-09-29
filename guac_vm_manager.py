@@ -1421,12 +1421,9 @@ class GuacamoleAPI:
                 ]:  # Accept both 200 and 201 as success
                     # Cache the working data source if not already cached
                     if (
-                        (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
-                    )
-                        and "/session/data/" in endpoint
-                    ):
+                    ) and "/session/data/" in endpoint:
                         parts = endpoint.split("/session/data/")
                         if len(parts) > 1:
                             data_source_part = parts[1].split("/")[0]
@@ -1627,12 +1624,9 @@ class GuacamoleAPI:
                 if response.status_code in (200, 201):
                     # Cache the working data source if not already cached
                     if (
-                        (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
-                    )
-                        and "/session/data/" in endpoint
-                    ):
+                    ) and "/session/data/" in endpoint:
                         parts = endpoint.split("/session/data/")
                         if len(parts) > 1:
                             data_source_part = parts[1].split("/")[0]
@@ -1741,12 +1735,9 @@ class GuacamoleAPI:
                 if response.status_code in (200, 201):
                     # Cache the working data source if not already cached
                     if (
-                        (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
-                    )
-                        and "/session/data/" in endpoint
-                    ):
+                    ) and "/session/data/" in endpoint:
                         parts = endpoint.split("/session/data/")
                         if len(parts) > 1:
                             data_source_part = parts[1].split("/")[0]
@@ -1839,12 +1830,9 @@ class GuacamoleAPI:
                 if response.status_code in (200, 201):
                     # Cache the working data source if not already cached
                     if (
-                        (
                         not hasattr(self, "_working_data_source")
                         or not self._working_data_source
-                    )
-                        and "/session/data/" in endpoint
-                    ):
+                    ) and "/session/data/" in endpoint:
                         parts = endpoint.split("/session/data/")
                         if len(parts) > 1:
                             data_source_part = parts[1].split("/")[0]
@@ -3715,13 +3703,12 @@ def interactive_add_vm(
             if (
                 start_choice == ""
                 or start_choice in ("y", "yes")
-                and vm_node and vm_id
+                and vm_node
+                and vm_id
                 and proxmox_api.start_vm(vm_node, vm_id)
             ):
                 vm_was_started = True
-                print(
-                    " Waiting 30 seconds for VM to boot and connect to network..."
-                )
+                print(" Waiting 30 seconds for VM to boot and connect to network...")
                 time.sleep(30)
 
                 # Try network scan again with all MACs
@@ -3913,11 +3900,11 @@ def interactive_add_vm(
         # Update parsed credentials with actual IP if we have it (Proxmox VMs only)
         if (
             (
-            selected_hostname
-            and selected_hostname != "unknown"
-            and parsed_credentials
-            and not is_external_host
-        )
+                selected_hostname
+                and selected_hostname != "unknown"
+                and parsed_credentials
+                and not is_external_host
+            )
             and vm_id is not None
             and vm_node
         ):
