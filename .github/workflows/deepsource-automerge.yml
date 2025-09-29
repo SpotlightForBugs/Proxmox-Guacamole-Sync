@@ -15,10 +15,17 @@ permissions:
 jobs:
   auto-merge-deepsource:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.user.login == 'deepsource-autofix[bot]'
+    if: ${{ github.event.pull_request.user.login == 'deepsource-autofix[bot]' }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up GitHub CLI
+        uses: cli/gh-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify PR author
         run: |
@@ -29,48 +36,34 @@ jobs:
             exit 1
           fi
 
-      - name: Verify PR content
+      - name: Wait until PR is mergeable
         run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          echo "PR Title: $PR_TITLE"
-          if [[ "$PR_TITLE" != *"style:"* && "$PR_TITLE" != *"fix:"* && "$PR_TITLE" != *"refactor:"* ]]; then
-            echo "PR title doesn't match expected DeepSource format, but proceeding anyway"
-          fi
-
-      - name: Wait for status checks
-        run: |
-          echo "Waiting for status checks to complete..."
-          # Wait up to 5 minutes for checks to complete
+          echo "Waiting for PR to become mergeable (up to 5m)..."
           timeout=300
           while [ $timeout -gt 0 ]; do
-            # Check if PR is mergeable and all checks passed
-            MERGEABLE=$(gh pr view ${{ github.event.pull_request.number }} --json mergeable,mergeStateStatus --jq '.mergeable, .mergeStateStatus')
-            if [[ "$MERGEABLE" == *"MERGEABLE"* ]] && [[ "$MERGEABLE" == *"CLEAN"* ]]; then
-              echo "PR is ready to merge!"
+            STATUS=$(gh pr view ${{ github.event.pull_request.number }} --json mergeable,mergeStateStatus --jq '.mergeable + "|" + .mergeStateStatus') || STATUS=""
+            echo "PR status: $STATUS"
+            if [[ "$STATUS" == *"MERGEABLE"* ]] && [[ "$STATUS" == *"CLEAN"* ]]; then
+              echo "PR ready to merge"
               break
             fi
-            echo "Waiting for PR to be ready... ($timeout seconds remaining)"
-            sleep 30
-            timeout=$((timeout - 30))
+            sleep 10
+            timeout=$((timeout - 10))
           done
-
           if [ $timeout -le 0 ]; then
             echo "Timeout waiting for PR to be mergeable"
             exit 1
           fi
 
-      - name: Auto-merge DeepSource PR
+      - name: Enable native auto-merge (or merge immediately if allowed)
         run: |
-          echo "Auto-merging DeepSource PR #${{ github.event.pull_request.number }}"
-          gh pr merge ${{ github.event.pull_request.number }} --auto --merge
+          echo "Enabling auto-merge / merging PR #${{ github.event.pull_request.number }}"
+          gh pr merge ${{ github.event.pull_request.number }} --auto --merge || (echo "Failed to enable auto-merge; attempting direct merge" && gh pr merge ${{ github.event.pull_request.number }} --merge)
 
       - name: Clean up merged branch
         run: |
-          # Get the branch name from the PR
           BRANCH_NAME=$(gh pr view ${{ github.event.pull_request.number }} --json headRefName --jq '.headRefName')
-          echo "Cleaning up branch: $BRANCH_NAME"
-
-          # Only delete if it's not a protected branch and not main/master
+          echo "Branch: $BRANCH_NAME"
           if [[ "$BRANCH_NAME" != "main" && "$BRANCH_NAME" != "master" && "$BRANCH_NAME" == *"deepsource"* ]]; then
             echo "Deleting branch: $BRANCH_NAME"
             git push origin --delete "$BRANCH_NAME" || echo "Branch may have been already deleted"
