@@ -8,6 +8,7 @@ secrets.txt
 
 # Python
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 *.so
