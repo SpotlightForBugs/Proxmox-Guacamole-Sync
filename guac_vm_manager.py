@@ -829,9 +829,8 @@ class GuacamoleAPI:
                                 {"Guacamole-Token": self.auth_token}
                             )
                             return True
-                        else:
-                            # Silent failure, try next endpoint
-                            continue
+                        # Silent failure, try next endpoint
+                        continue
                     elif response.status_code == 404:
                         # Expected for installations without /guacamole prefix
                         continue
@@ -883,9 +882,8 @@ class GuacamoleAPI:
                                     )
                                 )
                                 return True
-                            else:
-                                # Silent failure, try next endpoint
-                                continue
+                            # Silent failure, try next endpoint
+                            continue
                         elif response.status_code == 404:
                             # Expected for installations without /guacamole prefix
                             continue
@@ -951,7 +949,7 @@ class GuacamoleAPI:
                     self._save_working_endpoints_to_config()
 
                     return response.json()
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     print(
@@ -1009,7 +1007,7 @@ class GuacamoleAPI:
                         connection_info["parameters"] = {}
 
                     return connection_info
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     print(
@@ -1040,7 +1038,7 @@ class GuacamoleAPI:
                 response = self._make_request_with_spinner("get", groups_url)
                 if response.status_code == 200:
                     return response.json()
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     print(
@@ -1258,15 +1256,14 @@ class GuacamoleAPI:
                     f"[green]Updated connection '{name}' (ID: {identifier})[/green]"
                 )
                 return True
-            else:
-                console.print(
-                    Panel(
-                        f"Failed to update connection via canonical endpoint {canonical_url}: {resp.status_code}\n{resp.text}",
-                        title="Update failed",
-                        border_style="red",
-                    )
+            console.print(
+                Panel(
+                    f"Failed to update connection via canonical endpoint {canonical_url}: {resp.status_code}\n{resp.text}",
+                    title="Update failed",
+                    border_style="red",
                 )
-                return False
+            )
+            return False
 
         except requests.exceptions.RequestException as e:
             console.print(
@@ -1302,7 +1299,7 @@ class GuacamoleAPI:
                 response = self._make_request_with_spinner("delete", endpoint)
                 if response.status_code in (200, 204):
                     return True
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     # Try alternative approach - some Guacamole versions need different method
@@ -1336,7 +1333,7 @@ class GuacamoleAPI:
                 response = self._make_request_with_spinner("delete", endpoint)
                 if response.status_code in (200, 204):
                     return True
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     continue
@@ -1392,7 +1389,7 @@ class GuacamoleAPI:
                 )
                 if response.status_code in (200, 204):
                     return True
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     continue
@@ -1446,7 +1443,7 @@ class GuacamoleAPI:
                     identifier = data.get("identifier")
                     print(f"Created connection group '{name}' (ID: {identifier})")
                     return identifier
-                elif (
+                if (
                     response.status_code == 400
                     and "already exists" in response.text.lower()
                 ):
@@ -1466,7 +1463,7 @@ class GuacamoleAPI:
                         f"Warning: Group '{name}' exists but couldn't find ID - connections will be created at root level"
                     )
                     return None
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     print(f"Failed to create group: {response.status_code}")
@@ -1537,23 +1534,22 @@ class GuacamoleAPI:
                     f"[green]✓ Successfully renamed group to '{new_name}'[/green]"
                 )
                 return True
-            else:
+            console.print(
+                f"[red]✗ Failed to rename group: HTTP {response.status_code}[/red]"
+            )
+            if response.status_code == 405:
                 console.print(
-                    f"[red]✗ Failed to rename group: HTTP {response.status_code}[/red]"
+                    "[yellow]⚠ Method not allowed - check Guacamole permissions[/yellow]"
                 )
-                if response.status_code == 405:
-                    console.print(
-                        "[yellow]⚠ Method not allowed - check Guacamole permissions[/yellow]"
-                    )
-                elif response.status_code == 403:
-                    console.print(
-                        "[yellow]⚠ Access denied - insufficient permissions[/yellow]"
-                    )
-                elif response.status_code == 404:
-                    console.print(
-                        "[yellow]⚠ Group not found - may have been deleted[/yellow]"
-                    )
-                return False
+            elif response.status_code == 403:
+                console.print(
+                    "[yellow]⚠ Access denied - insufficient permissions[/yellow]"
+                )
+            elif response.status_code == 404:
+                console.print(
+                    "[yellow]⚠ Group not found - may have been deleted[/yellow]"
+                )
+            return False
         except requests.exceptions.RequestException as e:
             console.print(f"[red]✗ Network error during group update: {e}[/red]")
             return False
@@ -1655,7 +1651,7 @@ class GuacamoleAPI:
                         f"Successfully created RDP connection '{name}' (ID: {identifier})"
                     )
                     return identifier
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     print(
@@ -1769,7 +1765,7 @@ class GuacamoleAPI:
                         f"Successfully created VNC connection '{name}' (ID: {identifier})"
                     )
                     return identifier
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     print(
@@ -1866,7 +1862,7 @@ class GuacamoleAPI:
                         f"Successfully created SSH connection '{name}' (ID: {identifier})"
                     )
                     return identifier
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     continue
                 else:
                     print(
