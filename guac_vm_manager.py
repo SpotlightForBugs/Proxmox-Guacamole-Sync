@@ -1943,10 +1943,7 @@ class ProxmoxAPI:
             response = self._make_request_with_spinner(
                 "get", f"{self.config.proxmox_base_url}/version"
             )
-            if response.status_code == 200:
-                return True
-            else:
-                return False
+            return response.status_code == 200
         except requests.exceptions.RequestException as e:
             return False
 
