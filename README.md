@@ -22,6 +22,11 @@ user:"admin" pass:"MyPassword" protos:"rdp,ssh";
 ```
 Run `auto` again – connections appear in Guacamole.
 
+**Tip:** Use `--raw` flag for plain text output without colors/animations (perfect for scripts and logs):
+```bash
+uv run python guac_vm_manager.py --raw auto > sync.log
+```
+
 ---
 ## 2. Why This Tool
 * Zero-daemon, single script (`guac_vm_manager.py`)
@@ -100,6 +105,11 @@ uv run python guac_vm_manager.py edit           # Bulk edit by pattern
 uv run python guac_vm_manager.py delete         # Interactive / pattern delete
 uv run python guac_vm_manager.py autogroup      # Group connections intelligently
 uv run python guac_vm_manager.py test-network <MAC>
+
+# Use --raw flag for plain text (no colors/animations) - great for automation
+uv run python guac_vm_manager.py --raw auto     # Plain text sync output
+uv run python guac_vm_manager.py --raw list     # Plain text connection list
+# Also supports GUAC_RAW_MODE=1 environment variable
 ```
 No subcommand = interactive menu.
 
@@ -319,6 +329,18 @@ Find MAC:    uv run python guac_vm_manager.py test-network "AA:BB:CC:DD:EE:FF"
 List RDP:    uv run python guac_vm_manager.py list --protocol rdp
 Bulk edit:   uv run python guac_vm_manager.py edit --connection "web-.*" --username ops
 Delete temp: uv run python guac_vm_manager.py delete --connection "temp-.*" --force
+Raw mode:    uv run python guac_vm_manager.py --raw auto  # Plain text output
 ```
+
+## 24. Visual Features
+- **Hexagon Icons**: Visual indicators for operation types
+  - ⬢ (green) - Guacamole operations (view/edit connections)
+  - ⬢ (orange) - Proxmox operations (VM configuration)
+  - ⬢→⬢ (animated) - Sync operations (Proxmox → Guacamole)
+- **Sync Animations**: Real-time animated feedback during bulk operations
+- **Raw Mode**: Use `--raw` flag or `GUAC_RAW_MODE=1` for plain text output
+  - Perfect for automation, logging, CI/CD, and screen readers
+  - Disables colors, animations, and Rich formatting
+  - All features work identically in both modes
 
 End of README.

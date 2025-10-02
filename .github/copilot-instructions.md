@@ -1,6 +1,12 @@
 # Proxmox-Guacamole Sync - AI Coding Agent Instructions
 
-## Project Arch### Main Usage Patterns
+## 0 Problems Policy
+**CRITICAL REQUIREMENT**: All code changes must result in 0 type checking errors. The codebase must pass mypy type checking with --ignore-missing-imports with zero errors. Any code changes that introduce new type errors will be rejected.
+
+## UV Package Manager Requirement
+**MANDATORY**: All Python command execution must use `uv run` prefix. Never use bare `python` commands. Always use `uv run python` for running scripts and `uv pip` for package management.
+
+## Project Architecture### Main Usage Patterns
 ```bash
 # Modern Typer CLI Commands - All interactive menu options available as direct commands
 # Supports partial options (missing required fields prompt for input) and regex pattern matching
@@ -144,9 +150,16 @@ uv run python guac_vm_manager.py interactive     # Full interactive menu
 ## Project-Specific Conventions
 
 ### Modern CLI Architecture
-- **Single-file architecture**: All logic in `guac_vm_manager.py` (2800+ lines)
+- **Single-file architecture**: All logic in `guac_vm_manager.py` (9800+ lines)
 - **Typer CLI**: Modern command-line interface with subcommands and rich help
 - **Rich Output**: Colorful tables, panels, and progress indicators with clean authentication status
+- **Raw Mode**: Global `--raw` flag or `GUAC_RAW_MODE=1` env var for plain text output
+  - Disables colors, animations, hexagon icons, and Rich formatting
+  - Perfect for automation, logging, CI/CD pipelines, and screen readers
+  - All functionality identical in both modes
+- **Hexagon Sync Animations**: Visual feedback during Proxmox→Guacamole operations
+  - 4-frame animation: ⬢ (Proxmox) → ⬢→⬢ (transfer) → ⬢ (Guacamole)
+  - Automatic raw mode detection
 - **Minimal dependencies**: requests, urllib3, cryptography, typer, rich
 - **No ORM/framework**: Direct REST API calls with manual JSON handling
 - **Silent Authentication**: Clean endpoint probing with professional status display
@@ -180,6 +193,12 @@ Uses **progressive fallback** rather than strict validation:
 - **Wake-on-LAN**: Direct UDP broadcast to wake powered-off VMs before connecting
 
 ## Testing Structure
-- **Not Done yet**^
+- **Not Done yet**
 
 When modifying this codebase, maintain the single-file architecture and focus on the credential parsing logic as the core differentiator.
+
+# Pylint: some imports intentionally live inside functions to avoid heavy startup
+# or circular imports. Also some 'pass' statements are used intentionally to
+# silence non-critical exceptions in probing code paths. Disable the following
+# checks at module level to reduce noisy warnings.
+# pylint: disable=import-outside-toplevel, unnecessary-pass

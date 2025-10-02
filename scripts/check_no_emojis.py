@@ -7,6 +7,7 @@ occurrences otherwise.
 import os
 import re
 import sys
+from typing import Dict, List, Tuple
 
 # Emoji/unicode blocks commonly used for emoji presentation. Keep this focused
 # to avoid matching box-drawing, CJK, or other non-emoji Unicode ranges used in
@@ -35,6 +36,7 @@ ALLOWED = {
     "!",
     "★",
     "✱",
+    "⬢",  # U+2B22 WHITE HEXAGON - Used for Proxmox/Guacamole action indicators
 }
 
 INCLUDE_EXTS = {"py", "md", "sh", "txt", "yaml", "yml", "json", "ini", "cfg", "toml"}
@@ -51,7 +53,7 @@ SKIP_DIRS = {
 }
 
 
-def is_text_file(path):
+def is_text_file(path: str) -> bool:
     try:
         with open(path, "r", encoding="utf-8") as f:
             f.read(1024)
@@ -60,8 +62,8 @@ def is_text_file(path):
         return False
 
 
-def scan_file(path):
-    matches = []
+def scan_file(path: str) -> List[Tuple[int, int, str, str]]:
+    matches: List[Tuple[int, int, str, str]] = []
     try:
         with open(path, "r", encoding="utf-8") as f:
             for lineno, line in enumerate(f, start=1):
@@ -78,8 +80,8 @@ def scan_file(path):
     return matches
 
 
-def walk_and_scan(root):
-    findings = {}
+def walk_and_scan(root: str) -> Dict[str, List[Tuple[int, int, str, str]]]:
+    findings: Dict[str, List[Tuple[int, int, str, str]]] = {}
     for dirpath, dirnames, filenames in os.walk(root):
         # modify dirnames in place to skip unwanted dirs
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
