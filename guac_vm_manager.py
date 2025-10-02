@@ -31,6 +31,7 @@ import time
 import subprocess
 import re
 import ipaddress
+import platform
 
 import typer
 from rich.console import Console
@@ -191,12 +192,124 @@ def interactive_menu_with_navigation(
     options: List[Tuple[str, str]], prompt: str = "Select option"
 ) -> str:
     """Enhanced menu with TAB/arrow key navigation"""
-    import tty
-    import termios
+    try:
+        import tty
+        import termios
+        has_termios = True
+    except ImportError:
+        has_termios = False
+
+    # Try to import Windows-specific keyboard input
+    try:
+        import msvcrt
+        has_msvcrt = True
+    except ImportError:
+        has_msvcrt = False
 
     if not options:
         return ""
 
+    # Windows navigation using msvcrt
+    if not has_termios and has_msvcrt:
+        current_index = 0
+        valid_choices = [opt[0] for opt in options if opt[0] and opt[0] not in ["0/q", "q"]]
+        
+        # Add exit options
+        if not any(opt[0] in ["0", "0/q", "q"] for opt in options):
+            valid_choices.extend(["0", "q"])
+        
+        while True:
+            # Clear and redraw
+            console.clear()
+            
+            # Show menu with current selection highlighted
+            console.print(f"[bold cyan]{prompt}[/bold cyan]")
+            console.print(
+                "[dim]Use TAB/Arrow keys to navigate, ENTER to select, or type choice directly[/dim]\n"
+            )
+            
+            for i, (choice, desc) in enumerate(options):
+                if choice and desc:  # Skip separators
+                    if i == current_index:
+                        console.print(
+                            f"[bold white on blue] {choice} [/bold white on blue] [cyan]{desc}[/cyan]"
+                        )
+                    else:
+                        console.print(f" {choice}  {desc}")
+            
+            console.print(
+                f"\n[dim]Current selection: {options[current_index][0] if current_index < len(options) else ''}[/dim]"
+            )
+            
+            # Get single character input
+            ch = msvcrt.getch()
+            
+            if ch == b'\x1b':  # ESC key
+                return "q"
+            elif ch == b'\xe0':  # Extended key prefix (arrow keys on Windows)
+                ch2 = msvcrt.getch()
+                if ch2 == b'H':  # Up arrow
+                    current_index = max(0, current_index - 1)
+                    # Skip separators
+                    while current_index >= 0 and (
+                        not options[current_index][0]
+                        or not options[current_index][1]
+                    ):
+                        current_index -= 1
+                    current_index = max(0, current_index)
+                elif ch2 == b'P':  # Down arrow
+                    current_index = min(len(options) - 1, current_index + 1)
+                    # Skip separators
+                    while current_index < len(options) and (
+                        not options[current_index][0]
+                        or not options[current_index][1]
+                    ):
+                        current_index += 1
+                    current_index = min(len(options) - 1, current_index)
+            elif ch == b'\t':  # TAB
+                current_index = (current_index + 1) % len(options)
+                # Skip separators
+                start_index = current_index
+                while not options[current_index][0] or not options[current_index][1]:
+                    current_index = (current_index + 1) % len(options)
+                    if current_index == start_index:  # Prevent infinite loop
+                        break
+            elif ch == b'\r':  # ENTER
+                if current_index < len(options) and options[current_index][0]:
+                    return options[current_index][0]
+            elif ch in [b'q', b'Q']:
+                return "q"
+            elif ch == b'\x03':  # Ctrl+C
+                return "q"
+            elif ch.isdigit() or ch.decode('utf-8', errors='ignore') in valid_choices:
+                return ch.decode('utf-8', errors='ignore')
+    
+    # Fallback for non-Windows systems without termios - simple input
+    elif not has_termios:
+        console.clear()
+        console.print(f"[bold cyan]{prompt}[/bold cyan]")
+        console.print("[dim]Type your choice and press Enter[/dim]\n")
+        
+        for choice, desc in options:
+            if choice and desc:  # Skip separators
+                console.print(f" {choice}  {desc}")
+        
+        while True:
+            try:
+                choice = input("\nEnter your choice: ").strip()
+                valid_choices = [opt[0] for opt in options if opt[0] and opt[0] not in ["0/q", "q"]]
+                valid_choices.extend(["0", "q"])
+                
+                if choice in valid_choices:
+                    return choice
+                elif choice.lower() in ['q', 'quit', 'exit']:
+                    return "q"
+                else:
+                    console.print(f"[red]Invalid choice: {choice}[/red]")
+            except (EOFError, KeyboardInterrupt):
+                return "q"
+
+    # Unix/macOS - fancy navigation
     current_index = 0
     valid_choices = [opt[0] for opt in options if opt[0] and opt[0] not in ["0/q", "q"]]
 
@@ -2742,26 +2855,82 @@ class NetworkScanner:
 
     @staticmethod
     def get_local_network_range() -> Optional[str]:
-        """Get the local network range (e.g., 192.168.1.0/24)"""
+        """Get the local network range (e.g., 192.168.1.0/24) - Cross-platform"""
         try:
-            # Get default gateway on macOS
-            result = subprocess.run(
-                ["route", "-n", "get", "default"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=True,
-            )
-
-            gateway_match = re.search(r"gateway: (\d+\.\d+\.\d+\.\d+)", result.stdout)
-            if not gateway_match:
-                return None
-
-            gateway = gateway_match.group(1)
-            # Assume /24 network for simplicity
-            network_parts = gateway.split(".")
-            network_base = ".".join(network_parts[:3]) + ".0/24"
-            return network_base
+            system = platform.system().lower()
+            
+            if system == "windows":
+                # Windows: use route print to find default gateway
+                result = subprocess.run(
+                    ["route", "print", "0.0.0.0"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+                # Look for active routes with gateway
+                for line in result.stdout.split('\n'):
+                    if '0.0.0.0' in line and '0.0.0.0' in line:
+                        parts = line.split()
+                        if len(parts) >= 3:
+                            gateway = parts[2]
+                            if re.match(r'\d+\.\d+\.\d+\.\d+', gateway):
+                                network_parts = gateway.split(".")
+                                network_base = ".".join(network_parts[:3]) + ".0/24"
+                                return network_base
+            
+            elif system == "darwin":
+                # macOS: use route -n get default
+                result = subprocess.run(
+                    ["route", "-n", "get", "default"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+                gateway_match = re.search(r"gateway: (\d+\.\d+\.\d+\.\d+)", result.stdout)
+                if gateway_match:
+                    gateway = gateway_match.group(1)
+                    network_parts = gateway.split(".")
+                    network_base = ".".join(network_parts[:3]) + ".0/24"
+                    return network_base
+            
+            else:
+                # Linux: use ip route or route -n
+                try:
+                    result = subprocess.run(
+                        ["ip", "route", "show", "default"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=True,
+                    )
+                    gateway_match = re.search(r"via (\d+\.\d+\.\d+\.\d+)", result.stdout)
+                    if gateway_match:
+                        gateway = gateway_match.group(1)
+                        network_parts = gateway.split(".")
+                        network_base = ".".join(network_parts[:3]) + ".0/24"
+                        return network_base
+                except subprocess.CalledProcessError:
+                    # Fallback to route -n for older systems
+                    result = subprocess.run(
+                        ["route", "-n"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=True,
+                    )
+                    for line in result.stdout.split('\n'):
+                        if line.startswith('0.0.0.0'):
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                gateway = parts[1]
+                                if re.match(r'\d+\.\d+\.\d+\.\d+', gateway):
+                                    network_parts = gateway.split(".")
+                                    network_base = ".".join(network_parts[:3]) + ".0/24"
+                                    return network_base
+            
+            return None
         except Exception as e:
             print(f"Warning: Could not determine local network range: {e}")
             return None
@@ -2771,26 +2940,51 @@ class NetworkScanner:
         """Scan ARP table for MAC addresses"""
         arp_entries = []
         try:
-            # Try faster arp command first
-            result = subprocess.run(
-                ["arp", "-an"], capture_output=True, text=True, timeout=2, check=True
-            )
-            if result.returncode != 0:
-                # Fallback to regular arp -a
+            system = platform.system().lower()
+            
+            # Use appropriate arp command for each platform
+            if system == "windows":
                 result = subprocess.run(
                     ["arp", "-a"], capture_output=True, text=True, timeout=3, check=True
                 )
+            else:
+                # Unix-like systems (macOS/Linux) - try -an first for numeric output
+                try:
+                    result = subprocess.run(
+                        ["arp", "-an"], capture_output=True, text=True, timeout=2, check=True
+                    )
+                except subprocess.CalledProcessError:
+                    # Fallback to regular arp -a
+                    result = subprocess.run(
+                        ["arp", "-a"], capture_output=True, text=True, timeout=3, check=True
+                    )
 
             for line in result.stdout.split("\n"):
                 # Parse ARP entries - handle multiple formats:
-                # Format 1: host (192.168.1.1) at aa:bb:cc:dd:ee:ff [ether] on en0
-                # Format 2: ? (192.168.1.1) at aa:bb:cc:dd:ee:ff on en0
-                # Handle MAC addresses with or without leading zeros (9c:6b:0:8e vs 9c:6b:00:8e)
-                match = re.search(
-                    r"(\S+)\s+\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([a-fA-F0-9:]+)", line
-                )
-                if match:
-                    hostname, ip, mac = match.groups()
+                # Unix Format 1: host (192.168.1.1) at aa:bb:cc:dd:ee:ff [ether] on en0
+                # Unix Format 2: ? (192.168.1.1) at aa:bb:cc:dd:ee:ff on en0
+                # Windows Format: 192.168.1.1         aa-bb-cc-dd-ee-ff     dynamic
+                
+                ip, mac, hostname = None, None, None
+                
+                if system == "windows":
+                    # Windows: "  192.168.178.1         d4-24-dd-53-bf-cd     dynamic"
+                    match = re.search(
+                        r"(\d+\.\d+\.\d+\.\d+)\s+([a-fA-F0-9-]{17})\s+\w+", line
+                    )
+                    if match:
+                        ip, mac = match.groups()
+                        mac = mac.replace("-", ":")  # Convert Windows format to Unix format
+                        hostname = "unknown"
+                else:
+                    # Unix format
+                    match = re.search(
+                        r"(\S+)\s+\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([a-fA-F0-9:]+)", line
+                    )
+                    if match:
+                        hostname, ip, mac = match.groups()
+                
+                if ip and mac:
 
                     # Validate MAC address format (should be exactly 6 groups of 2 hex chars)
                     mac_parts = mac.lower().split(":")
@@ -5659,8 +5853,34 @@ def delete_connections_interactive():
                 console.print(
                     f"\n[red]{selected_count} item(s) selected for deletion[/red]"
                 )
-            import tty
-            import termios
+            
+            try:
+                import tty
+                import termios
+                has_termios = True
+            except ImportError:
+                has_termios = False
+                
+            if not has_termios:
+                # Windows fallback - simple input
+                try:
+                    choice = input("\nPress 's' to select/deselect, 'd' to delete, or 'q' to quit: ").strip().lower()
+                    if choice == 'q':
+                        console.print("\n[yellow]Delete cancelled.[/yellow]")
+                        return True
+                    elif choice == 'd':
+                        # Proceed to delete selected items
+                        selected_items = [item for item in items if item["selected"]]
+                        if selected_items:
+                            break
+                        console.print("\n[yellow]No items selected for deletion.[/yellow]")
+                    elif choice == 's' and items:
+                        # Toggle selection of first item (simple fallback)
+                        items[0]["selected"] = not items[0]["selected"]
+                    continue
+                except (EOFError, KeyboardInterrupt):
+                    console.print("\n[yellow]Delete cancelled.[/yellow]")
+                    return True
 
             fd = sys.stdin.fileno()
             old_settings = termios.tcgetattr(fd)
@@ -5856,8 +6076,39 @@ def edit_connections_interactive():
                 console.print(
                     f"{prefix} [{style} {highlight}]{item['display']}[/{style} {highlight}]"
                 )
-            import tty
-            import termios
+            
+            try:
+                import tty
+                import termios
+                has_termios = True
+            except ImportError:
+                has_termios = False
+                
+            if not has_termios:
+                # Windows fallback
+                try:
+                    choice = input("\nUse arrow keys simulation - 'u' for up, 'd' for down, 's' to select, Enter to confirm, 'q' to quit: ").strip().lower()
+                    if choice == 'q':
+                        console.print("\n[yellow]Delete cancelled.[/yellow]")
+                        return True
+                    elif choice == 'u':
+                        current_index = max(0, current_index - 1)
+                        continue
+                    elif choice == 'd':
+                        current_index = min(len(items) - 1, current_index + 1)
+                        continue
+                    elif choice == 's':
+                        items[current_index]["selected"] = not items[current_index]["selected"]
+                        continue
+                    elif choice == '':  # Enter key
+                        selected_items = [item for item in items if item["selected"]]
+                        if selected_items:
+                            break
+                        console.print("\n[yellow]No items selected for deletion.[/yellow]")
+                        continue
+                except (EOFError, KeyboardInterrupt):
+                    console.print("\n[yellow]Delete cancelled.[/yellow]")
+                    return True
 
             fd = sys.stdin.fileno()
             old_settings = termios.tcgetattr(fd)

@@ -1,0 +1,80 @@
+[project]
+name = "proxmox-guacamole-sync"
+version = "1.0.0"
+description = "A single-file Python tool that bridges Proxmox VE and Apache Guacamole by parsing VM credentials from Proxmox VM notes and automatically creating remote connections (RDP/VNC/SSH) in Guacamole."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Johannes", email = "your-email@example.com" }
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+    "Topic :: System :: Networking",
+]
+keywords = ["proxmox", "guacamole", "rdp", "vnc", "ssh", "virtualization"]
+
+dependencies = [
+    "requests>=2.32.5",
+    "urllib3>=2.5.0",
+    "cryptography>=46.0.2",
+    "typer>=0.19.2",
+    "rich>=14.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/SpotlightForBugs/Proxmox-Guacamole-Sync"
+Repository = "https://github.com/SpotlightForBugs/Proxmox-Guacamole-Sync.git"
+Issues = "https://github.com/SpotlightForBugs/Proxmox-Guacamole-Sync/issues"
+
+[project.scripts]
+guac-vm-manager = "guac_vm_manager:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["guac_vm_manager*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
