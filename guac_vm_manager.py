@@ -112,7 +112,11 @@ class PasswordDecryptionError(Exception):
         self.root_cause = root_cause
 
     def format_diagnostics(self) -> str:
-        root = f"{type(self.root_cause).__name__}: {self.root_cause}" if self.root_cause else "<unknown>"
+        root = (
+            f"{type(self.root_cause).__name__}: {self.root_cause}"
+            if self.root_cause
+            else "<unknown>"
+        )
         info_lines = [self.args[0]]
         if self.details:
             info_lines.append(self.details)
@@ -168,7 +172,7 @@ def _format_smart_action_label(action: SmartAction) -> str:
         "info": ("ℹ", "cyan"),
     }
     icon, color = icon_map.get(action.severity, ("•", "white"))
-    
+
     # Add category icons (skip if raw mode)
     category_icon = ""
     if not raw_mode:
@@ -178,11 +182,13 @@ def _format_smart_action_label(action: SmartAction) -> str:
             category_icon = "[bold orange1]⬢[/bold orange1] "  # Hexagon for Proxmox
         elif action.category == "both":
             category_icon = "[bold orange1]⬢[/bold orange1]→[bold green]⬢[/bold green] "  # Combined with arrow
-    
+
     if raw_mode:
         # Plain text output without colors
-        return f"{icon} {action.label}" + (f" - {action.description}" if action.description else "")
-    
+        return f"{icon} {action.label}" + (
+            f" - {action.description}" if action.description else ""
+        )
+
     base = f"{category_icon}[{color}]{icon} {action.label}[/{color}]"
     if action.description:
         return f"{base} — {action.description}"
@@ -191,17 +197,17 @@ def _format_smart_action_label(action: SmartAction) -> str:
 
 class SyncAnimation:
     """Hexagon-based sync animation for Proxmox→Guacamole operations."""
-    
+
     def __init__(self, description: str = "Syncing"):
         self.description = description
         self.frames = [
             "[bold orange1]⬢[/bold orange1]   [dim]⬢[/dim]",  # Proxmox active
             "[bold orange1]⬢[/bold orange1] → [dim]⬢[/dim]",  # Arrow appears
-            "[dim]⬢[/dim] → [bold green]⬢[/bold green]",     # Guacamole active
-            "[dim]⬢[/dim]   [bold green]⬢[/bold green]",     # Guacamole stays
+            "[dim]⬢[/dim] → [bold green]⬢[/bold green]",  # Guacamole active
+            "[dim]⬢[/dim]   [bold green]⬢[/bold green]",  # Guacamole stays
         ]
         self.frame_index = 0
-    
+
     def __enter__(self) -> "SyncAnimation":
         """Context manager entry - returns self for use in 'with' statements."""
         if raw_mode:
@@ -209,41 +215,45 @@ class SyncAnimation:
             print(f"{self.description}...")
             return self
         return self
-    
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[types.TracebackType]) -> None:
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[types.TracebackType],
+    ) -> None:
         """Context manager exit."""
-        if not raw_mode and hasattr(self, '_status'):
+        if not raw_mode and hasattr(self, "_status"):
             self._status.stop()
         return None
-    
+
     def start(self) -> None:
         """Start the animation (only in non-raw mode)."""
         if raw_mode:
             return
         self._status = console.status(
-            f"{self.frames[0]} {self.description}...",
-            spinner="dots"
+            f"{self.frames[0]} {self.description}...", spinner="dots"
         )
         self._status.start()
-    
+
     def update(self, message: Optional[str] = None) -> None:
         """Update animation message."""
         if raw_mode:
             if message:
                 print(f"  {message}")
             return
-        if hasattr(self, '_status') and self._status:
+        if hasattr(self, "_status") and self._status:
             self.frame_index = (self.frame_index + 1) % len(self.frames)
             display_msg = message or self.description
             self._status.update(f"{self.frames[self.frame_index]} {display_msg}...")
-    
+
     def stop(self, final_message: Optional[str] = None) -> None:
         """Stop the animation with optional final message."""
         if raw_mode:
             if final_message:
                 print(f"✓ {final_message}")
             return
-        if hasattr(self, '_status') and self._status:
+        if hasattr(self, "_status") and self._status:
             self._status.stop()
         if final_message:
             console.print(f"[green]✓ {final_message}[/green]")
@@ -254,7 +264,8 @@ def safe_print(message: str, style: str = "") -> None:
     if raw_mode:
         # Strip Rich markup for raw mode
         import re
-        clean_message = re.sub(r'\[/?[^\]]+\]', '', message)
+
+        clean_message = re.sub(r"\[/?[^\]]+\]", "", message)
         print(clean_message)
     else:
         if style:
@@ -268,15 +279,17 @@ def safe_panel(content: str, title: str = "", border_style: str = "cyan") -> Non
     if raw_mode:
         # Plain text box
         import re
-        clean_content = re.sub(r'\[/?[^\]]+\]', '', content)
+
+        clean_content = re.sub(r"\[/?[^\]]+\]", "", content)
         print(f"\n{'=' * 60}")
         if title:
             print(f" {title}")
-            print('=' * 60)
+            print("=" * 60)
         print(clean_content)
-        print('=' * 60 + '\n')
+        print("=" * 60 + "\n")
     else:
         from rich.panel import Panel
+
         console.print(Panel(content, title=title, border_style=border_style))
 
 
@@ -287,6 +300,7 @@ def safe_table(title: str = "") -> Any:
         return {"title": title, "rows": []}
     else:
         from rich.table import Table
+
         return Table(title=title, show_header=True, header_style="bold cyan")
 
 
@@ -304,9 +318,7 @@ def _discover_pending_connections(
         return pending_sync, password_issues
 
     existing_names = {
-        conn.get("name")
-        for conn in connections.values()
-        if conn.get("name")
+        conn.get("name") for conn in connections.values() if conn.get("name")
     }
 
     try:
@@ -396,14 +408,14 @@ def find_duplicate_connections(guac_api: "GuacamoleAPI") -> List[Dict[str, Any]]
         connections = guac_api.get_connections() or {}
     except Exception:
         return []
-    
+
     # Build a signature for each connection: hostname + port + protocol + username (for RDP/SSH)
     signature_map: Dict[str, List[Dict[str, Any]]] = {}
-    
+
     for conn_id, conn_data in connections.items():
         name = conn_data.get("name", "")
         protocol = conn_data.get("protocol", "").lower()
-        
+
         # Get parameters (may need to fetch details)
         params = conn_data.get("parameters", {})
         if not params:
@@ -412,111 +424,135 @@ def find_duplicate_connections(guac_api: "GuacamoleAPI") -> List[Dict[str, Any]]
                 params = details.get("parameters", {})
             except Exception:
                 continue
-        
+
         hostname = params.get("hostname", "")
         port = params.get("port", "")
         username = params.get("username", "")
-        
+
         if not hostname or not protocol:
             continue
-        
+
         # Create signature: protocol + hostname + port + username (for protocols that use it)
         # VNC doesn't use username, so we exclude it for VNC
         if protocol == "vnc":
             signature = f"{protocol}://{hostname}:{port}"
         else:
             signature = f"{protocol}://{username}@{hostname}:{port}"
-        
+
         if signature not in signature_map:
             signature_map[signature] = []
-        
-        signature_map[signature].append({
-            "id": conn_id,
-            "name": name,
-            "protocol": protocol,
-            "hostname": hostname,
-            "port": port,
-            "username": username,
-        })
-    
+
+        signature_map[signature].append(
+            {
+                "id": conn_id,
+                "name": name,
+                "protocol": protocol,
+                "hostname": hostname,
+                "port": port,
+                "username": username,
+            }
+        )
+
     # Find signatures with multiple connections (duplicates)
     duplicate_groups: List[Dict[str, Any]] = []
     for signature, connections_list in signature_map.items():
         if len(connections_list) > 1:
-            duplicate_groups.append({
-                "signature": signature,
-                "connections": connections_list,
-            })
-    
+            duplicate_groups.append(
+                {
+                    "signature": signature,
+                    "connections": connections_list,
+                }
+            )
+
     return duplicate_groups
 
 
-def delete_duplicate_connections(guac_api: "GuacamoleAPI", duplicate_groups: List[Dict[str, Any]]) -> None:
+def delete_duplicate_connections(
+    guac_api: "GuacamoleAPI", duplicate_groups: List[Dict[str, Any]]
+) -> None:
     """
     Interactively delete duplicate connections, letting user choose which to keep.
     """
     console.print(Panel(" Cleaning up duplicate connections", border_style="cyan"))
-    
+
     deleted_count = 0
     kept_count = 0
-    
+
     for group in duplicate_groups:
         connections = group["connections"]
         signature = group["signature"]
-        
+
         if len(connections) <= 1:
             continue
-        
+
         console.print(f"\n[cyan]Duplicate group: {signature}[/cyan]")
         console.print(f"Found {len(connections)} duplicate connection(s):\n")
-        
+
         # Show all connections with numbers
         for idx, conn in enumerate(connections, 1):
             console.print(f"  [{idx}] {conn['name']}")
-        
+
         # Ask user which to keep
         while True:
             try:
-                choice = console.input(f"\n[yellow]Which connection do you want to KEEP? (1-{len(connections)}, or 's' to skip): [/yellow]").strip().lower()
-                
-                if choice == 's':
+                choice = (
+                    console.input(
+                        f"\n[yellow]Which connection do you want to KEEP? (1-{len(connections)}, or 's' to skip): [/yellow]"
+                    )
+                    .strip()
+                    .lower()
+                )
+
+                if choice == "s":
                     console.print("[yellow]Skipped this group[/yellow]")
                     break
-                
+
                 choice_num = int(choice)
                 if 1 <= choice_num <= len(connections):
                     keep_idx = choice_num - 1
                     keep = connections[keep_idx]
                     to_delete = [c for i, c in enumerate(connections) if i != keep_idx]
-                    
+
                     console.print(f"\n  [green]✓ Keeping: {keep['name']}[/green]")
-                    
+
                     # Delete the others
                     for conn in to_delete:
                         try:
                             if guac_api.delete_connection(conn["id"]):
-                                console.print(f"  [yellow]✗ Deleted: {conn['name']}[/yellow]")
+                                console.print(
+                                    f"  [yellow]✗ Deleted: {conn['name']}[/yellow]"
+                                )
                                 deleted_count += 1
                             else:
-                                console.print(f"  [red]✗ Failed to delete: {conn['name']}[/red]")
+                                console.print(
+                                    f"  [red]✗ Failed to delete: {conn['name']}[/red]"
+                                )
                         except Exception as e:
-                            console.print(f"  [red]✗ Error deleting {conn['name']}: {e}[/red]")
-                    
+                            console.print(
+                                f"  [red]✗ Error deleting {conn['name']}: {e}[/red]"
+                            )
+
                     kept_count += 1
                     break
                 else:
-                    console.print(f"[red]Please enter a number between 1 and {len(connections)}[/red]")
+                    console.print(
+                        f"[red]Please enter a number between 1 and {len(connections)}[/red]"
+                    )
             except ValueError:
-                console.print("[red]Invalid input. Please enter a number or 's' to skip.[/red]")
+                console.print(
+                    "[red]Invalid input. Please enter a number or 's' to skip.[/red]"
+                )
             except KeyboardInterrupt:
                 console.print("\n[yellow]Cancelled.[/yellow]")
                 return
             except Exception as e:
                 console.print(f"  [red]✗ Error during deletion: {e}[/red]")
-        
+
         kept_count += 1
-    
-    console.print(f"\n[green]✓ Cleanup complete: kept {kept_count} connection(s), deleted {deleted_count} duplicate(s)[/green]")
+
+    console.print(
+        f"\n[green]✓ Cleanup complete: kept {kept_count} connection(s), deleted {deleted_count} duplicate(s)[/green]"
+    )
 
 
 def compute_smart_actions() -> Tuple[List[SmartAction], List[str]]:
@@ -565,7 +601,9 @@ def compute_smart_actions() -> Tuple[List[SmartAction], List[str]]:
             except Exception as exc:
                 console.print(f"[red]Guacamole auth failed: {exc}[/red]")
             else:
-                console.print("[green]✓ Guacamole API authentication successful[/green]")
+                console.print(
+                    "[green]✓ Guacamole API authentication successful[/green]"
+                )
             console.print(
                 "[green]✓ Proxmox API authentication successful[/green]"
                 if prox_status
@@ -707,10 +745,10 @@ def compute_smart_actions() -> Tuple[List[SmartAction], List[str]]:
     try:
         duplicates = find_duplicate_connections(guac_api)
         if duplicates:
-            
+
             def cleanup_duplicates() -> None:
                 delete_duplicate_connections(guac_api, duplicates)
-            
+
             total_dupes = sum(len(group["connections"]) - 1 for group in duplicates)
             actions.append(
                 SmartAction(
@@ -731,7 +769,7 @@ def compute_smart_actions() -> Tuple[List[SmartAction], List[str]]:
         if connections:
             ungrouped_count = 0
             connection_details: Dict[str, Dict[str, Any]] = {}
-            
+
             # Quick scan to count ungrouped connections
             for conn_id, conn in connections.items():
                 parent_id = conn.get("parentIdentifier")
@@ -745,27 +783,30 @@ def compute_smart_actions() -> Tuple[List[SmartAction], List[str]]:
                         "params": details.get("parameters", {}),
                         "group": parent_id,
                     }
-            
+
             # Only analyze if we have enough ungrouped connections to make grouping worthwhile
             if ungrouped_count >= 3:
                 # Quick analysis to see if there are grouping opportunities
                 from collections import defaultdict
+
                 hostname_groups: Dict[str, List[str]] = defaultdict(list)
-                
+
                 for conn_id, details in connection_details.items():
                     if not details["group"] or details["group"] == "ROOT":
                         hostname = details["params"].get("hostname", "")
                         if hostname:
                             hostname_groups[hostname].append(conn_id)
-                
+
                 # Count how many groups could be created (same hostname = multi-user access)
-                potential_groups = sum(1 for conns in hostname_groups.values() if len(conns) >= 2)
-                
+                potential_groups = sum(
+                    1 for conns in hostname_groups.values() if len(conns) >= 2
+                )
+
                 if potential_groups > 0:
-                    
+
                     def run_autogroup() -> None:
                         autogroup_connections()
-                    
+
                     actions.append(
                         SmartAction(
                             key=next_key(),
@@ -780,7 +821,9 @@ def compute_smart_actions() -> Tuple[List[SmartAction], List[str]]:
         messages.append(f"[yellow]Grouping analysis unavailable: {err}[/yellow]")
 
     if not actions:
-        messages.append("[green]No urgent smart actions detected. You're all set![/green]")
+        messages.append(
+            "[green]No urgent smart actions detected. You're all set![/green]"
+        )
 
     return actions, messages
 
@@ -856,6 +899,7 @@ def interactive_menu_with_navigation(
     try:
         import tty as tty_module  # type: ignore
         import termios as termios_module  # type: ignore
+
         has_termios = True
     except ImportError:
         has_termios = False
@@ -864,6 +908,7 @@ def interactive_menu_with_navigation(
     msvcrt_module = None
     try:
         import msvcrt as msvcrt_module  # type: ignore
+
         has_msvcrt = True
     except ImportError:
         has_msvcrt = False
@@ -906,7 +951,9 @@ def interactive_menu_with_navigation(
     # Windows navigation using msvcrt
     if not has_termios and has_msvcrt:
         if msvcrt_module is None:
-            raise RuntimeError("msvcrt keyboard navigation requested but module is unavailable")
+            raise RuntimeError(
+                "msvcrt keyboard navigation requested but module is unavailable"
+            )
         current_index = 0
         while current_index < len(options) and not options[current_index][0]:
             current_index += 1
@@ -915,13 +962,13 @@ def interactive_menu_with_navigation(
         while True:
             # Clear and redraw
             console.clear()
-            
+
             # Show menu with current selection highlighted
             console.print(f"[bold cyan]{prompt}[/bold cyan]")
             console.print(
                 "[dim]Use TAB/Arrow keys to navigate, ENTER to select, or type choice directly[/dim]\n"
             )
-            
+
             for i, (choice, desc) in enumerate(options):
                 if not desc:
                     continue
@@ -934,37 +981,35 @@ def interactive_menu_with_navigation(
                         console.print(f" {choice}  {desc}")
                 else:
                     console.print(f"   {desc}")
-            
+
             console.print(
                 f"\n[dim]Current selection: {options[current_index][0] if current_index < len(options) else ''}[/dim]"
             )
-            
+
             # Get single character input
             ch = msvcrt_module.getch()  # type: ignore[attr-defined]
-            
-            if ch == b'\x1b':  # ESC key
+
+            if ch == b"\x1b":  # ESC key
                 return "q"
-            elif ch == b'\xe0':  # Extended key prefix (arrow keys on Windows)
+            elif ch == b"\xe0":  # Extended key prefix (arrow keys on Windows)
                 ch2 = msvcrt_module.getch()  # type: ignore[attr-defined]
-                if ch2 == b'H':  # Up arrow
+                if ch2 == b"H":  # Up arrow
                     current_index = max(0, current_index - 1)
                     # Skip separators
                     while current_index >= 0 and (
-                        not options[current_index][0]
-                        or not options[current_index][1]
+                        not options[current_index][0] or not options[current_index][1]
                     ):
                         current_index -= 1
                     current_index = max(0, current_index)
-                elif ch2 == b'P':  # Down arrow
+                elif ch2 == b"P":  # Down arrow
                     current_index = min(len(options) - 1, current_index + 1)
                     # Skip separators
                     while current_index < len(options) and (
-                        not options[current_index][0]
-                        or not options[current_index][1]
+                        not options[current_index][0] or not options[current_index][1]
                     ):
                         current_index += 1
                     current_index = min(len(options) - 1, current_index)
-            elif ch == b'\t':  # TAB
+            elif ch == b"\t":  # TAB
                 current_index = (current_index + 1) % len(options)
                 # Skip separators
                 start_index = current_index
@@ -972,29 +1017,29 @@ def interactive_menu_with_navigation(
                     current_index = (current_index + 1) % len(options)
                     if current_index == start_index:  # Prevent infinite loop
                         break
-            elif ch == b'\r':  # ENTER
+            elif ch == b"\r":  # ENTER
                 if current_index < len(options) and options[current_index][0]:
                     return options[current_index][0]
-            elif ch in [b'q', b'Q']:
+            elif ch in [b"q", b"Q"]:
                 return "q"
-            elif ch == b'\x03':  # Ctrl+C
+            elif ch == b"\x03":  # Ctrl+C
                 return "q"
             else:
-                decoded = ch.decode('utf-8', errors='ignore')
-                if decoded.lower() == 'q':
-                    return 'q'
+                decoded = ch.decode("utf-8", errors="ignore")
+                if decoded.lower() == "q":
+                    return "q"
                 normalized = normalize_choice(decoded)
                 if normalized:
                     return normalized
                 if decoded.isdigit() and decoded in valid_choices:
                     return decoded
-    
+
     # Fallback for non-Windows systems without termios - simple input
     elif not has_termios:
         console.clear()
         console.print(f"[bold cyan]{prompt}[/bold cyan]")
         console.print("[dim]Type your choice and press Enter[/dim]\n")
-        
+
         for choice, desc in options:
             if not desc:
                 continue
@@ -1002,14 +1047,14 @@ def interactive_menu_with_navigation(
                 console.print(f" {choice}  {desc}")
             else:
                 console.print(f"   {desc}")
-        
+
         while True:
             try:
                 choice = input("\nEnter your choice: ").strip()
                 normalized = normalize_choice(choice)
                 if normalized:
                     return normalized
-                elif choice.lower() in ['q', 'quit', 'exit']:
+                elif choice.lower() in ["q", "quit", "exit"]:
                     return "q"
                 else:
                     console.print(f"[red]Invalid choice: {choice}[/red]")
@@ -1052,7 +1097,9 @@ def interactive_menu_with_navigation(
         # Get single character input
         fd = sys.stdin.fileno()
         if termios_module is None or tty_module is None:
-            raise RuntimeError("termios keyboard navigation requested but termios module is unavailable")
+            raise RuntimeError(
+                "termios keyboard navigation requested but termios module is unavailable"
+            )
 
         old_settings = termios_module.tcgetattr(fd)  # type: ignore[attr-defined]
 
@@ -1169,7 +1216,12 @@ class AnimationManager:
         self._thread.start()
         return self
 
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[types.TracebackType]) -> None:
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        tb: Optional[types.TracebackType],
+    ) -> None:
         if not self.enabled:
             return None
         self._stop = True
@@ -1507,10 +1559,10 @@ class GuacamoleAPI:
                 f.write(content)
 
             # Update class attributes for this session
-            setattr(Config, 'GUAC_WORKING_BASE_PATH', self._working_base_path)
-            setattr(Config, 'GUAC_WORKING_DATA_SOURCE', self._working_data_source)
+            setattr(Config, "GUAC_WORKING_BASE_PATH", self._working_base_path)
+            setattr(Config, "GUAC_WORKING_DATA_SOURCE", self._working_data_source)
             if self.config.GUAC_DATA_SOURCE != self._working_data_source:
-                setattr(Config, 'GUAC_DATA_SOURCE', self._working_data_source)
+                setattr(Config, "GUAC_DATA_SOURCE", self._working_data_source)
 
             console.print(
                 "[green]✓ Saved discovered endpoints to config for faster future runs[/green]"
@@ -1527,56 +1579,80 @@ class GuacamoleAPI:
 
         # Create a smart description for the spinner showing variable parts
         url_parts = url.replace(self.config.GUAC_BASE_URL, "").split("?")[0]
-        
+
         # Intelligently identify static vs dynamic URL parts
-        parts = [p for p in url_parts.split('/') if p]  # Remove empty strings
-        
+        parts = [p for p in url_parts.split("/") if p]  # Remove empty strings
+
         # Common static API keywords (lowercase for case-insensitive matching)
         # Includes all Guacamole database names and API keywords
         static_keywords = {
-            'api', 'session', 'sessions', 'data', 
+            "api",
+            "session",
+            "sessions",
+            "data",
             # Database/datasource names
-            'postgresql', 'mysql', 'sqlserver', 'sqlite', 'h2', 'oracle', 'mariadb',
+            "postgresql",
+            "mysql",
+            "sqlserver",
+            "sqlite",
+            "h2",
+            "oracle",
+            "mariadb",
             # API resource types
-            'connections', 'connectiongroups', 'groups', 'users', 'permissions', 
-            'parameters', 'tokens', 'history', 'activeconnections', 'tree', 
-            'sharingprofiles', 'attributes', 'usergroups', 'schema'
+            "connections",
+            "connectiongroups",
+            "groups",
+            "users",
+            "permissions",
+            "parameters",
+            "tokens",
+            "history",
+            "activeconnections",
+            "tree",
+            "sharingprofiles",
+            "attributes",
+            "usergroups",
+            "schema",
         }
-        
+
         # Identify dynamic parts (numbers, UUIDs, or not in static keywords)
         dynamic_indices: List[int] = []
         for i, part in enumerate(parts):
             part_lower = part.lower()
             # Dynamic if: all digits, or contains hyphens (UUID-like), or not a known keyword
-            if part.isdigit() or ('-' in part and not part_lower in static_keywords) or part_lower not in static_keywords:
+            if (
+                part.isdigit()
+                or ("-" in part and not part_lower in static_keywords)
+                or part_lower not in static_keywords
+            ):
                 dynamic_indices.append(i)
-        
+
         # Build smart description
         if len(parts) > 4 and dynamic_indices:
             # Show first static part, compress middle, show dynamic parts
             result_parts: List[str] = []
             last_shown = -1
-            
+
             # Always start with ... to indicate compression
             if dynamic_indices and dynamic_indices[0] > 0:
-                result_parts.append('...')
-            
+                result_parts.append("...")
+
             for idx in dynamic_indices:
                 # Show context around dynamic parts
-                if idx > 0 and parts[idx-1].lower() in static_keywords:
+                if idx > 0 and parts[idx - 1].lower() in static_keywords:
                     # Show the static keyword before the dynamic value
                     if last_shown < idx - 1 and len(result_parts) > 1:
-                        result_parts.append('...')
+                        result_parts.append("...")
                     if last_shown < idx - 1 or len(result_parts) == 1:
-                        result_parts.append(parts[idx-1])
+                        result_parts.append(parts[idx - 1])
                     result_parts.append(parts[idx])
                     last_shown = idx
                 else:
                     if result_parts and last_shown < idx - 1 and len(result_parts) > 1:
-                        result_parts.append('...')
+                        result_parts.append("...")
                     result_parts.append(parts[idx])
                     last_shown = idx
-            
+
             if result_parts:
                 description = f"API {method.upper()} /{'/'.join(result_parts)}"
             else:
@@ -2022,7 +2098,7 @@ class GuacamoleAPI:
                             wol_params["wol-udp-port"] = str(value)
 
                 rdp_connection_data["parameters"].update(wol_params)
-            
+
             connection_data = rdp_connection_data
         else:  # VNC
             # Default VNC parameters with enhanced options
@@ -2075,7 +2151,7 @@ class GuacamoleAPI:
                             vnc_wol_params["wol-udp-port"] = str(value)
 
                 vnc_connection_data["parameters"].update(vnc_wol_params)
-            
+
             connection_data = vnc_connection_data
 
         # Ensure payload includes identifier and activeConnections per API docs
@@ -2742,18 +2818,40 @@ class ProxmoxAPI:
 
         # Create a smart description for the spinner showing variable parts
         url_parts = url.replace(self.config.proxmox_base_url, "").split("?")[0]
-        
+
         # Intelligently identify static vs dynamic URL parts
-        parts = [p for p in url_parts.split('/') if p]  # Remove empty strings
-        
+        parts = [p for p in url_parts.split("/") if p]  # Remove empty strings
+
         # Common static API keywords for Proxmox (lowercase)
         static_keywords = {
-            'api2', 'json', 'nodes', 'qemu', 'lxc', 'storage', 'status', 
-            'current', 'config', 'firewall', 'snapshot', 'clone', 'migrate',
-            'network', 'dns', 'version', 'access', 'users', 'groups', 'roles',
-            'pools', 'ha', 'resources', 'tasks', 'cluster', 'backup'
+            "api2",
+            "json",
+            "nodes",
+            "qemu",
+            "lxc",
+            "storage",
+            "status",
+            "current",
+            "config",
+            "firewall",
+            "snapshot",
+            "clone",
+            "migrate",
+            "network",
+            "dns",
+            "version",
+            "access",
+            "users",
+            "groups",
+            "roles",
+            "pools",
+            "ha",
+            "resources",
+            "tasks",
+            "cluster",
+            "backup",
         }
-        
+
         # Identify dynamic parts (node names, VMIDs, storage names, etc.)
         dynamic_indices: List[int] = []
         for i, part in enumerate(parts):
@@ -2761,33 +2859,33 @@ class ProxmoxAPI:
             # Dynamic if: all digits (VMID), or not a known static keyword
             if part.isdigit() or part_lower not in static_keywords:
                 # But keep 'json' and 'api2' as static
-                if part_lower not in {'json', 'api2'}:
+                if part_lower not in {"json", "api2"}:
                     dynamic_indices.append(i)
-        
+
         # Build smart description showing dynamic values with context
         if len(parts) > 3 and dynamic_indices:
             result_parts: List[str] = []
             last_shown = -1
-            
+
             # Always start with ... to indicate compression
             if dynamic_indices and dynamic_indices[0] > 0:
-                result_parts.append('...')
-            
+                result_parts.append("...")
+
             for idx in dynamic_indices:
                 # Show the static keyword before dynamic value for context
-                if idx > 0 and parts[idx-1].lower() in static_keywords:
+                if idx > 0 and parts[idx - 1].lower() in static_keywords:
                     if last_shown < idx - 1 and len(result_parts) > 1:
-                        result_parts.append('...')
+                        result_parts.append("...")
                     if last_shown < idx - 1 or len(result_parts) == 1:
-                        result_parts.append(parts[idx-1])
+                        result_parts.append(parts[idx - 1])
                     result_parts.append(parts[idx])
                     last_shown = idx
                 else:
                     if result_parts and last_shown < idx - 1 and len(result_parts) > 1:
-                        result_parts.append('...')
+                        result_parts.append("...")
                     result_parts.append(parts[idx])
                     last_shown = idx
-            
+
             if result_parts:
                 description = f"API {method.upper()} /{'/'.join(result_parts)}"
             else:
@@ -3102,7 +3200,9 @@ class ProxmoxAPI:
 
             # Extract required parameters with fallbacks (support both new and old names)
             username = params.get("username", params.get("user", "")).strip()
-            password: Optional[str] = params.get("password", params.get("pass", "")).strip()
+            password: Optional[str] = params.get(
+                "password", params.get("pass", "")
+            ).strip()
             encrypted_password = params.get("encrypted_password", "").strip()
             protocols_str = params.get(
                 "protocols", params.get("protos", params.get("proto", ""))
@@ -3111,9 +3211,7 @@ class ProxmoxAPI:
             # Handle password decryption if encrypted
             if encrypted_password and not password:
                 override_key = (vm_node, str(vm_id), username or "")
-                override_password = self._password_overrides.pop(
-                    override_key, None
-                )
+                override_password = self._password_overrides.pop(override_key, None)
                 if override_password:
                     password = override_password
                     params["password"] = override_password
@@ -3777,7 +3875,7 @@ class NetworkScanner:
         """Get the local network range (e.g., 192.168.1.0/24) - Cross-platform"""
         try:
             system = platform.system().lower()
-            
+
             if system == "windows":
                 # Windows: use route print to find default gateway
                 result = subprocess.run(
@@ -3788,16 +3886,16 @@ class NetworkScanner:
                     check=True,
                 )
                 # Look for active routes with gateway
-                for line in result.stdout.split('\n'):
-                    if '0.0.0.0' in line and '0.0.0.0' in line:
+                for line in result.stdout.split("\n"):
+                    if "0.0.0.0" in line and "0.0.0.0" in line:
                         parts = line.split()
                         if len(parts) >= 3:
                             gateway = parts[2]
-                            if re.match(r'\d+\.\d+\.\d+\.\d+', gateway):
+                            if re.match(r"\d+\.\d+\.\d+\.\d+", gateway):
                                 network_parts = gateway.split(".")
                                 network_base = ".".join(network_parts[:3]) + ".0/24"
                                 return network_base
-            
+
             elif system == "darwin":
                 # macOS: use route -n get default
                 result = subprocess.run(
@@ -3807,13 +3905,15 @@ class NetworkScanner:
                     timeout=10,
                     check=True,
                 )
-                gateway_match = re.search(r"gateway: (\d+\.\d+\.\d+\.\d+)", result.stdout)
+                gateway_match = re.search(
+                    r"gateway: (\d+\.\d+\.\d+\.\d+)", result.stdout
+                )
                 if gateway_match:
                     gateway = gateway_match.group(1)
                     network_parts = gateway.split(".")
                     network_base = ".".join(network_parts[:3]) + ".0/24"
                     return network_base
-            
+
             else:
                 # Linux: use ip route or route -n
                 try:
@@ -3824,7 +3924,9 @@ class NetworkScanner:
                         timeout=5,
                         check=True,
                     )
-                    gateway_match = re.search(r"via (\d+\.\d+\.\d+\.\d+)", result.stdout)
+                    gateway_match = re.search(
+                        r"via (\d+\.\d+\.\d+\.\d+)", result.stdout
+                    )
                     if gateway_match:
                         gateway = gateway_match.group(1)
                         network_parts = gateway.split(".")
@@ -3839,16 +3941,16 @@ class NetworkScanner:
                         timeout=5,
                         check=True,
                     )
-                    for line in result.stdout.split('\n'):
-                        if line.startswith('0.0.0.0'):
+                    for line in result.stdout.split("\n"):
+                        if line.startswith("0.0.0.0"):
                             parts = line.split()
                             if len(parts) >= 2:
                                 gateway = parts[1]
-                                if re.match(r'\d+\.\d+\.\d+\.\d+', gateway):
+                                if re.match(r"\d+\.\d+\.\d+\.\d+", gateway):
                                     network_parts = gateway.split(".")
                                     network_base = ".".join(network_parts[:3]) + ".0/24"
                                     return network_base
-            
+
             return None
         except Exception as e:
             print(f"Warning: Could not determine local network range: {e}")
@@ -3860,7 +3962,7 @@ class NetworkScanner:
         arp_entries: List[Dict[str, str]] = []
         try:
             system = platform.system().lower()
-            
+
             # Use appropriate arp command for each platform
             if system == "windows":
                 result = subprocess.run(
@@ -3870,12 +3972,20 @@ class NetworkScanner:
                 # Unix-like systems (macOS/Linux) - try -an first for numeric output
                 try:
                     result = subprocess.run(
-                        ["arp", "-an"], capture_output=True, text=True, timeout=2, check=True
+                        ["arp", "-an"],
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                        check=True,
                     )
                 except subprocess.CalledProcessError:
                     # Fallback to regular arp -a
                     result = subprocess.run(
-                        ["arp", "-a"], capture_output=True, text=True, timeout=3, check=True
+                        ["arp", "-a"],
+                        capture_output=True,
+                        text=True,
+                        timeout=3,
+                        check=True,
                     )
 
             for line in result.stdout.split("\n"):
@@ -3883,9 +3993,9 @@ class NetworkScanner:
                 # Unix Format 1: host (192.168.1.1) at aa:bb:cc:dd:ee:ff [ether] on en0
                 # Unix Format 2: ? (192.168.1.1) at aa:bb:cc:dd:ee:ff on en0
                 # Windows Format: 192.168.1.1         aa-bb-cc-dd-ee-ff     dynamic
-                
+
                 ip, mac, hostname = None, None, None
-                
+
                 if system == "windows":
                     # Windows: "  192.168.178.1         d4-24-dd-53-bf-cd     dynamic"
                     match = re.search(
@@ -3893,7 +4003,9 @@ class NetworkScanner:
                     )
                     if match:
                         ip, mac = match.groups()
-                        mac = mac.replace("-", ":")  # Convert Windows format to Unix format
+                        mac = mac.replace(
+                            "-", ":"
+                        )  # Convert Windows format to Unix format
                         hostname = "unknown"
                 else:
                     # Unix format
@@ -3902,7 +4014,7 @@ class NetworkScanner:
                     )
                     if match:
                         hostname, ip, mac = match.groups()
-                
+
                 if ip and mac:
 
                     # Validate MAC address format (should be exactly 6 groups of 2 hex chars)
@@ -5434,7 +5546,9 @@ def interactive_add_vm(
                 )
                 from rich.live import Live
 
-                def do_update(entry: Tuple[Dict[str, Any], str]) -> Tuple[str, Optional[str]]:
+                def do_update(
+                    entry: Tuple[Dict[str, Any], str],
+                ) -> Tuple[str, Optional[str]]:
                     conn, identifier = entry
                     try:
                         conn_enable_wol = enable_wol and not conn.get(
@@ -5484,9 +5598,10 @@ def interactive_add_vm(
                         tbl.add_row(conn["name"], st, res)
                     return tbl
 
-                with Live(
-                    build_table(), console=console, refresh_per_second=20
-                ), progress:
+                with (
+                    Live(build_table(), console=console, refresh_per_second=20),
+                    progress,
+                ):
                     if disable_threads or len(updates_needed) == 1:
                         progress.update(
                             task_id, description="Updating (sequential mode)..."
@@ -5592,7 +5707,9 @@ def interactive_add_vm(
             )
             from rich.live import Live
 
-            def do_update(entry: Tuple[Dict[str, Any], str]) -> Tuple[str, Optional[str]]:
+            def do_update(
+                entry: Tuple[Dict[str, Any], str],
+            ) -> Tuple[str, Optional[str]]:
                 conn, identifier = entry
                 try:
                     conn_enable_wol = enable_wol and not conn.get("wol_disabled", False)
@@ -5760,8 +5877,14 @@ def interactive_add_vm(
                 created_connections.append((name, identifier))
     else:
         # Parallel mode with progress display
-        from rich.progress import BarColumn as ProgressBarColumn, TimeElapsedColumn as ProgressTimeElapsedColumn
-        from concurrent.futures import ThreadPoolExecutor as GuacThreadPoolExecutor, as_completed as futures_as_completed
+        from rich.progress import (
+            BarColumn as ProgressBarColumn,
+            TimeElapsedColumn as ProgressTimeElapsedColumn,
+        )
+        from concurrent.futures import (
+            ThreadPoolExecutor as GuacThreadPoolExecutor,
+            as_completed as futures_as_completed,
+        )
 
         with Progress(
             SpinnerColumn(),
@@ -5995,7 +6118,9 @@ def list_connections(
 
     # Pre-build a mapping of connection names to PVE sources for efficiency
     connection_to_pve_source: Dict[str, str] = {}
-    connection_to_vm_info: Dict[str, Tuple[str, int]] = {}  # Also store VM info for encryption checks
+    connection_to_vm_info: Dict[str, Tuple[str, int]] = (
+        {}
+    )  # Also store VM info for encryption checks
     proxmox_api = None
     try:
         proxmox_api = ProxmoxAPI(config)
@@ -6037,7 +6162,9 @@ def list_connections(
                             for cred in parsed_creds:
                                 connection_name = cred.get("connection_name")
                                 if connection_name and vm_id is not None:
-                                    connection_to_pve_source[connection_name] = node_name
+                                    connection_to_pve_source[connection_name] = (
+                                        node_name
+                                    )
                                     connection_to_vm_info[connection_name] = (
                                         node_name,
                                         vm_id,
@@ -6221,13 +6348,26 @@ def list_connections(
         if should_include:
             # Strip rich markup and convert Unicode symbols to ASCII for plain text output
             sync_status_plain = sync_status
-            for tag in ["[green]", "[/green]", "[yellow]", "[/yellow]", "[red]", "[/red]", "[dim]", "[/dim]"]:
+            for tag in [
+                "[green]",
+                "[/green]",
+                "[yellow]",
+                "[/yellow]",
+                "[red]",
+                "[/red]",
+                "[dim]",
+                "[/dim]",
+            ]:
                 sync_status_plain = sync_status_plain.replace(tag, "")
-            
+
             # Convert Unicode symbols to plain ASCII text for JSON/CSV
-            sync_status_plain = sync_status_plain.replace("✓", "").replace("⚠", "Warning:").replace("✗", "Error:")
+            sync_status_plain = (
+                sync_status_plain.replace("✓", "")
+                .replace("⚠", "Warning:")
+                .replace("✗", "Error:")
+            )
             sync_status_plain = sync_status_plain.strip()
-            
+
             # Normalize status text for JSON/CSV
             if sync_status_plain == "OK":
                 sync_status_plain = "OK"
@@ -6235,22 +6375,25 @@ def list_connections(
                 sync_status_plain = sync_status_plain.replace("Warning:", "").strip()
             elif sync_status_plain.startswith("Error:"):
                 sync_status_plain = sync_status_plain.replace("Error:", "").strip()
-            
-            filtered_connections.append({
-                "connection_id": conn_id,
-                "name": name,
-                "hostname": display_hostname,
-                "protocol": protocol.upper(),
-                "port": str(port),
-                "pve_source": pve_source,
-                "sync_status": sync_status_plain,
-                "sync_status_rich": sync_status,  # Keep rich version for table display
-            })
+
+            filtered_connections.append(
+                {
+                    "connection_id": conn_id,
+                    "name": name,
+                    "hostname": display_hostname,
+                    "protocol": protocol.upper(),
+                    "port": str(port),
+                    "pve_source": pve_source,
+                    "sync_status": sync_status_plain,
+                    "sync_status_rich": sync_status,  # Keep rich version for table display
+                }
+            )
 
     # Handle different output formats
     if json_output:
         # Output as JSON
         import json as json_module
+
         output_data = {
             "total_connections": len(connections),
             "filtered_connections": len(filtered_connections),
@@ -6265,34 +6408,46 @@ def list_connections(
                     "sync_status": conn["sync_status"],
                 }
                 for conn in filtered_connections
-            ]
+            ],
         }
         print(json_module.dumps(output_data, indent=2))
         return True
-    
+
     if csv_output:
         # Output to CSV file
         try:
             import csv
-            with open(csv_output, 'w', newline='', encoding='utf-8') as csvfile:
-                fieldnames = ["name", "hostname", "protocol", "port", "pve_source", "sync_status"]
+
+            with open(csv_output, "w", newline="", encoding="utf-8") as csvfile:
+                fieldnames = [
+                    "name",
+                    "hostname",
+                    "protocol",
+                    "port",
+                    "pve_source",
+                    "sync_status",
+                ]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
                 for conn in filtered_connections:
-                    writer.writerow({
-                        "name": conn["name"],
-                        "hostname": conn["hostname"],
-                        "protocol": conn["protocol"],
-                        "port": conn["port"],
-                        "pve_source": conn["pve_source"],
-                        "sync_status": conn["sync_status"],
-                    })
-            console.print(f"[green]✓[/green] Exported {len(filtered_connections)} connections to {csv_output}")
+                    writer.writerow(
+                        {
+                            "name": conn["name"],
+                            "hostname": conn["hostname"],
+                            "protocol": conn["protocol"],
+                            "port": conn["port"],
+                            "pve_source": conn["pve_source"],
+                            "sync_status": conn["sync_status"],
+                        }
+                    )
+            console.print(
+                f"[green]✓[/green] Exported {len(filtered_connections)} connections to {csv_output}"
+            )
             return True
         except Exception as e:
             console.print(f"[red]Error writing CSV file: {e}[/red]")
             return False
-    
+
     # Default: Rich table output
     # Create enhanced title with filtered count
     if len(filtered_connections) == len(connections):
@@ -6301,7 +6456,7 @@ def list_connections(
     else:
         # Filters applied
         title_text = f"● Guacamole Connections ({len(filtered_connections)} out of {len(connections)} match filters)"
-    
+
     table = Table(
         title=title_text,
         title_style="bold cyan",
@@ -6464,11 +6619,14 @@ def collect_out_of_sync_vms(
                 )
 
                 existing_proto = (
-                    (details.get("protocol") or existing_info["data"].get("protocol") or "")
-                    .lower()
-                )
+                    details.get("protocol")
+                    or existing_info["data"].get("protocol")
+                    or ""
+                ).lower()
                 target_proto = (cred_payload.get("protocol") or "").lower()
-                expected_port = cred_payload.get("port") or default_ports.get(target_proto, "")
+                expected_port = cred_payload.get("port") or default_ports.get(
+                    target_proto, ""
+                )
 
                 mismatch = False
 
@@ -6510,7 +6668,11 @@ def collect_out_of_sync_vms(
         # Remove duplicate issue strings while preserving order
         sync_issues = list(dict.fromkeys(sync_issues))
 
-        if missing_connections > 0 and existing_connections_count == 0 and not requires_encryption:
+        if (
+            missing_connections > 0
+            and existing_connections_count == 0
+            and not requires_encryption
+        ):
             continue  # Treat as "not configured" rather than out-of-sync
 
         if missing_connections > 0 or sync_issues:
@@ -6643,11 +6805,7 @@ def repair_out_of_sync(
 
     if not auto_approve:
         answer = (
-            console.input(
-                "\nApply automatic repairs now? (Y/n/skip): "
-            )
-            .strip()
-            .lower()
+            console.input("\nApply automatic repairs now? (Y/n/skip): ").strip().lower()
         )
         if answer in ("", "y", "yes"):
             pass
@@ -6695,7 +6853,11 @@ def repair_out_of_sync(
             old_notes = entry.get("notes", "")
             updated_notes_lines: List[str] = []
             for line in old_notes.split("\n"):
-                if username and f'user:"{username}"' in line and "encrypted_password:" in line:
+                if (
+                    username
+                    and f'user:"{username}"' in line
+                    and "encrypted_password:" in line
+                ):
                     # Remove the old encrypted_password and add the plain password
                     line = re.sub(r'encrypted_password:"[^"]*"', "", line)
                     line = re.sub(r"\s+", " ", line).strip()
@@ -6728,7 +6890,9 @@ def repair_out_of_sync(
             # Rebuild credential metadata for downstream processing
             rebuilt_creds: List[Dict[str, Any]] = []
             name_to_identifier: Dict[Optional[str], Optional[str]] = {
-                cast(str, cred.get("connection_name")): cast(str, cred.get("existing_identifier"))
+                cast(str, cred.get("connection_name")): cast(
+                    str, cred.get("existing_identifier")
+                )
                 for cred in cast(List[Dict[str, Any]], entry.get("credentials", []))
             }
             for payload in reparsed_creds:
@@ -7010,7 +7174,9 @@ def autogroup_connections() -> bool:
     return True
 
 
-def analyze_connections_for_grouping(connection_details: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+def analyze_connections_for_grouping(
+    connection_details: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     """Enhanced analysis with multiple intelligent grouping strategies"""
     suggestions: List[Dict[str, Any]] = []
     ungrouped_connections: List[Dict[str, Any]] = []
@@ -7224,7 +7390,9 @@ def analyze_connections_for_grouping(connection_details: Dict[str, Dict[str, Any
     return suggestions
 
 
-def suggest_group_name_from_connections(connections: List[Dict[str, Any]], hostname: str) -> str:
+def suggest_group_name_from_connections(
+    connections: List[Dict[str, Any]], hostname: str
+) -> str:
     """Suggest a meaningful group name from connection names and hostname"""
     names = [conn["name"] for conn in connections]
 
@@ -7317,7 +7485,9 @@ def extract_base_name(connection_name: str) -> str:
     return name.strip("-_.")
 
 
-def move_connection_to_group(guac_api: Any, connection_id: str, group_identifier: str) -> Any:
+def move_connection_to_group(
+    guac_api: Any, connection_id: str, group_identifier: str
+) -> Any:
     """Move a connection to a specific group"""
     return guac_api.move_connection_to_group(connection_id, group_identifier)
 
@@ -7430,21 +7600,29 @@ def delete_connections_interactive() -> bool:
                 console.print(
                     f"\n[red]{selected_count} item(s) selected for deletion[/red]"
                 )
-            
+
             if not has_termios:
                 # Windows fallback - simple input
                 try:
-                    choice = input("\nPress 's' to select/deselect, 'd' to delete, or 'q' to quit: ").strip().lower()
-                    if choice == 'q':
+                    choice = (
+                        input(
+                            "\nPress 's' to select/deselect, 'd' to delete, or 'q' to quit: "
+                        )
+                        .strip()
+                        .lower()
+                    )
+                    if choice == "q":
                         console.print("\n[yellow]Delete cancelled.[/yellow]")
                         return True
-                    elif choice == 'd':
+                    elif choice == "d":
                         # Proceed to delete selected items
                         selected_items = [item for item in items if item["selected"]]
                         if selected_items:
                             break
-                        console.print("\n[yellow]No items selected for deletion.[/yellow]")
-                    elif choice == 's' and items:
+                        console.print(
+                            "\n[yellow]No items selected for deletion.[/yellow]"
+                        )
+                    elif choice == "s" and items:
                         # Toggle selection of first item (simple fallback)
                         items[0]["selected"] = not items[0]["selected"]
                     continue
@@ -8105,7 +8283,13 @@ def delete_single_item(guac_api: Any, item: Dict[str, Any]) -> bool:
 
 
 def process_single_vm_auto(
-    config: Any, proxmox_api: Any, guac_api: Any, node_name: str, vm: Dict[str, Any], credentials: List[Dict[str, Any]], force: bool = False
+    config: Any,
+    proxmox_api: Any,
+    guac_api: Any,
+    node_name: str,
+    vm: Dict[str, Any],
+    credentials: List[Dict[str, Any]],
+    force: bool = False,
 ) -> bool:
     """Process a single VM with automatic configuration"""
     vm_id = vm["vmid"]
@@ -8522,10 +8706,10 @@ def auto_process_all_vms(
                 # Start sync animation
                 anim = SyncAnimation(f"Syncing {vm_name}")
                 anim.start()
-                
+
                 try:
                     anim.update(f"Processing {len(creds)} connection(s) for {vm_name}")
-                    
+
                     # Actually process the VM - simplified auto processing
                     result = process_single_vm_auto(
                         config, proxmox_api, guac_api, node_name, vm, creds, force
@@ -8538,7 +8722,7 @@ def auto_process_all_vms(
                         anim.stop()
                         safe_print("  ✗ Failed to add", "red")
                         error_count += 1
-                        
+
                 except Exception as e:
                     anim.stop()
                     safe_print(f"  ✗ Error: {str(e)[:50]}...", "red")
@@ -8893,12 +9077,18 @@ def edit_connections_by_pattern(
             )
 
             if success:
-                console.print(f"[green]✓ Updated: {cast(str, conn.get('name', ''))}[/green]")
+                console.print(
+                    f"[green]✓ Updated: {cast(str, conn.get('name', ''))}[/green]"
+                )
                 success_count += 1
             else:
-                console.print(f"[red]✗ Failed to update: {cast(str, conn.get('name', ''))}[/red]")
+                console.print(
+                    f"[red]✗ Failed to update: {cast(str, conn.get('name', ''))}[/red]"
+                )
         except Exception as e:
-            console.print(f"[red]✗ Error updating {cast(str, conn.get('name', ''))}: {e}[/red]")
+            console.print(
+                f"[red]✗ Error updating {cast(str, conn.get('name', ''))}: {e}[/red]"
+            )
 
     console.print(
         f"\n[green]Successfully updated: {success_count}/{len(matching_connections)} connections[/green]"
@@ -9630,7 +9820,7 @@ def delete_connections_cmd(
 @app.command("interactive")
 def interactive_menu() -> None:
     """Interactive menu mode"""
-    
+
     # raw_mode is now set globally via callback
 
     if (
@@ -9643,14 +9833,17 @@ def interactive_menu() -> None:
     # Enhanced welcome header (conditional formatting)
     # Get the current username
     import getpass
+
     username = getpass.getuser()
-    
+
     if raw_mode:
         print("\n" + "=" * 60)
         print(f"  Proxmox-Guacamole Sync - Welcome, {username}!")
         print("=" * 60 + "\n")
     else:
-        header_text = Text("Proxmox-Guacamole Sync", style="bold cyan", justify="center")
+        header_text = Text(
+            "Proxmox-Guacamole Sync", style="bold cyan", justify="center"
+        )
         console.print(
             Panel(
                 header_text,
@@ -9674,7 +9867,9 @@ def interactive_menu() -> None:
                 for message in smart_messages:
                     menu_options.append(("", message))
                 for action in smart_actions:
-                    menu_options.append((action.key, _format_smart_action_label(action)))
+                    menu_options.append(
+                        (action.key, _format_smart_action_label(action))
+                    )
 
             # Menu items with conditional hexagon icons based on raw_mode
             if raw_mode:
@@ -9698,12 +9893,24 @@ def interactive_menu() -> None:
                     [
                         ("", "═══ Connection Management ═══"),
                         ("1", "[bold green]⬢[/bold green] ● View existing connections"),
-                        ("2", "[bold green]⬢[/bold green] ● Edit or delete connections"),
+                        (
+                            "2",
+                            "[bold green]⬢[/bold green] ● Edit or delete connections",
+                        ),
                         ("", "═══ Proxmox Sync ═══"),
-                        ("3", "[bold orange1]⬢[/bold orange1]→[bold green]⬢[/bold green] ● Select Proxmox VM to add"),
-                        ("4", "[bold orange1]⬢[/bold orange1]→[bold green]⬢[/bold green] ● Auto-sync all VMs with credentials"),
+                        (
+                            "3",
+                            "[bold orange1]⬢[/bold orange1]→[bold green]⬢[/bold green] ● Select Proxmox VM to add",
+                        ),
+                        (
+                            "4",
+                            "[bold orange1]⬢[/bold orange1]→[bold green]⬢[/bold green] ● Auto-sync all VMs with credentials",
+                        ),
                         ("", "═══ External Hosts ═══"),
-                        ("5", "[bold green]⬢[/bold green] ● Add external (non-Proxmox) host"),
+                        (
+                            "5",
+                            "[bold green]⬢[/bold green] ● Add external (non-Proxmox) host",
+                        ),
                         ("", "═══ Tools & Help ═══"),
                         ("6", "● View available CLI commands"),
                         ("0", "● Exit to shell"),
@@ -9734,7 +9941,9 @@ def interactive_menu() -> None:
                 try:
                     action.handler()
                     if raw_mode:
-                        print("\n✓ Smart action completed. Press Enter to refresh suggestions.")
+                        print(
+                            "\n✓ Smart action completed. Press Enter to refresh suggestions."
+                        )
                     else:
                         console.print(
                             "\n[green]✓ Smart action completed. Press Enter to refresh suggestions.[/green]"
@@ -9938,7 +10147,7 @@ def main(
         False,
         "--raw",
         help="Raw output mode: disable colors, animations, and Rich formatting (applies to all commands)",
-        envvar="GUAC_RAW_MODE"
+        envvar="GUAC_RAW_MODE",
     ),
 ) -> None:
     """Guacamole VM Manager - Sync Proxmox VMs with Apache Guacamole"""
@@ -9947,13 +10156,13 @@ def main(
     if log_file:
         verbose_mode = True
         verbose_log_file = log_file
-    
+
     # Set raw mode globally
     raw_mode = raw
     if raw:
         # Disable Rich console colors in raw mode
         console.no_color = True
-        
+
     if ctx.invoked_subcommand is None:
 
         if (
