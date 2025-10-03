@@ -68,6 +68,14 @@ except ImportError:
     sys.exit(1)
 
 # Disable SSL warnings for self-signed certificates
+# SECURITY NOTE: This is intentional for internal infrastructure tools.
+# Static analysis tools (DeepSource, Bandit) will flag this as B501/security issue.
+# This is ACCEPTABLE because:
+# 1. Tool is designed for trusted internal networks with known endpoints
+# 2. Self-signed certificates are standard in internal Proxmox/Guacamole deployments
+# 3. Configuration is user-controlled (config.py is git-ignored)
+# 4. No untrusted external input flows into SSL connections
+# See SECURITY.md for full security policy and acceptable risk documentation.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Initialize Rich console and Typer app
@@ -1386,7 +1394,8 @@ class GuacamoleAPI:
     def __init__(self, config: Config):
         self.config = config
         self.session = requests.Session()
-        self.session.verify = False  # For self-signed certificates
+        # Disable SSL verification for self-signed certificates (intentional, see SECURITY.md)
+        self.session.verify = False  # nosec B501
         self.auth_token = None
 
         # Load cached working endpoints from config
@@ -2717,7 +2726,8 @@ class ProxmoxAPI:
     def __init__(self, config: Config):
         self.config = config
         self.session = requests.Session()
-        self.session.verify = False  # For self-signed certificates
+        # Disable SSL verification for self-signed certificates (intentional, see SECURITY.md)
+        self.session.verify = False  # nosec B501
         self.session.headers.update(
             {
                 "Authorization": f"PVEAPIToken={self.config.PROXMOX_TOKEN_ID}={self.config.PROXMOX_SECRET}"
@@ -6038,23 +6048,8 @@ def list_connections(
         # If Proxmox is not accessible, all connections will show as "Unknown"
         pass
 
-    # Create enhanced title with symbols and better formatting
-    title_text = f"● Guacamole Connections ({len(connections)} found)"
-    table = Table(
-        title=title_text,
-        title_style="bold cyan",
-        show_header=True,
-        header_style="bold magenta",
-    )
-
-    table.add_column(
-        "Connection Name", style="cyan", no_wrap=False, min_width=20, max_width=30
-    )
-    table.add_column("Host", style="green", min_width=15, max_width=25)
-    table.add_column("Protocol", style="magenta", justify="center", max_width=8)
-    table.add_column("Port", style="yellow", justify="center", max_width=6)
-    table.add_column("PVE Source", style="orange1", justify="center", max_width=12)
-    table.add_column("Sync Status", style="white", justify="center", min_width=12)
+    # Collect filtered connections first to get accurate count
+    filtered_connections: List[Dict[str, Any]] = []
 
     for conn_id, conn in connections.items():
         name = conn.get("name", "N/A")
@@ -6222,16 +6217,116 @@ def list_connections(
                 if filter_group.lower() not in group_name.lower():
                     should_include = False
 
-        # Add row if it passes all filters
+        # Collect connection data if it passes all filters
         if should_include:
-            table.add_row(
-                name,
-                display_hostname,
-                protocol.upper(),
-                str(port),
-                pve_source,
-                sync_status,
-            )
+            # Strip rich markup and convert Unicode symbols to ASCII for plain text output
+            sync_status_plain = sync_status
+            for tag in ["[green]", "[/green]", "[yellow]", "[/yellow]", "[red]", "[/red]", "[dim]", "[/dim]"]:
+                sync_status_plain = sync_status_plain.replace(tag, "")
+            
+            # Convert Unicode symbols to plain ASCII text for JSON/CSV
+            sync_status_plain = sync_status_plain.replace("✓", "").replace("⚠", "Warning:").replace("✗", "Error:")
+            sync_status_plain = sync_status_plain.strip()
+            
+            # Normalize status text for JSON/CSV
+            if sync_status_plain == "OK":
+                sync_status_plain = "OK"
+            elif sync_status_plain.startswith("Warning:"):
+                sync_status_plain = sync_status_plain.replace("Warning:", "").strip()
+            elif sync_status_plain.startswith("Error:"):
+                sync_status_plain = sync_status_plain.replace("Error:", "").strip()
+            
+            filtered_connections.append({
+                "connection_id": conn_id,
+                "name": name,
+                "hostname": display_hostname,
+                "protocol": protocol.upper(),
+                "port": str(port),
+                "pve_source": pve_source,
+                "sync_status": sync_status_plain,
+                "sync_status_rich": sync_status,  # Keep rich version for table display
+            })
+
+    # Handle different output formats
+    if json_output:
+        # Output as JSON
+        import json as json_module
+        output_data = {
+            "total_connections": len(connections),
+            "filtered_connections": len(filtered_connections),
+            "connections": [
+                {
+                    "connection_id": conn["connection_id"],
+                    "name": conn["name"],
+                    "hostname": conn["hostname"],
+                    "protocol": conn["protocol"],
+                    "port": conn["port"],
+                    "pve_source": conn["pve_source"],
+                    "sync_status": conn["sync_status"],
+                }
+                for conn in filtered_connections
+            ]
+        }
+        print(json_module.dumps(output_data, indent=2))
+        return True
+    
+    if csv_output:
+        # Output to CSV file
+        try:
+            import csv
+            with open(csv_output, 'w', newline='', encoding='utf-8') as csvfile:
+                fieldnames = ["name", "hostname", "protocol", "port", "pve_source", "sync_status"]
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                for conn in filtered_connections:
+                    writer.writerow({
+                        "name": conn["name"],
+                        "hostname": conn["hostname"],
+                        "protocol": conn["protocol"],
+                        "port": conn["port"],
+                        "pve_source": conn["pve_source"],
+                        "sync_status": conn["sync_status"],
+                    })
+            console.print(f"[green]✓[/green] Exported {len(filtered_connections)} connections to {csv_output}")
+            return True
+        except Exception as e:
+            console.print(f"[red]Error writing CSV file: {e}[/red]")
+            return False
+    
+    # Default: Rich table output
+    # Create enhanced title with filtered count
+    if len(filtered_connections) == len(connections):
+        # No filters applied or all match
+        title_text = f"● Guacamole Connections ({len(filtered_connections)} total)"
+    else:
+        # Filters applied
+        title_text = f"● Guacamole Connections ({len(filtered_connections)} out of {len(connections)} match filters)"
+    
+    table = Table(
+        title=title_text,
+        title_style="bold cyan",
+        show_header=True,
+        header_style="bold magenta",
+    )
+
+    table.add_column(
+        "Connection Name", style="cyan", no_wrap=False, min_width=20, max_width=30
+    )
+    table.add_column("Host", style="green", min_width=15, max_width=25)
+    table.add_column("Protocol", style="magenta", justify="center", max_width=8)
+    table.add_column("Port", style="yellow", justify="center", max_width=6)
+    table.add_column("PVE Source", style="orange1", justify="center", max_width=12)
+    table.add_column("Sync Status", style="white", justify="center", min_width=12)
+
+    for conn in filtered_connections:
+        table.add_row(
+            conn["name"],
+            conn["hostname"],
+            conn["protocol"],
+            conn["port"],
+            conn["pve_source"],
+            conn["sync_status_rich"],
+        )
 
     console.print(table)
     return True

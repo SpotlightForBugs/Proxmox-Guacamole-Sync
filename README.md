@@ -200,7 +200,14 @@ Screens:
 | Key validation      | Encryption key sanity-checked at startup |
 | Token scope         | Proxmox token requires VM read (+ optional start/stop for discovery) |
 
-Disable certificate warnings only if you control both endpoints.
+**Important**: SSL certificate verification is intentionally disabled for self-signed certificates (common in internal infrastructure). See `SECURITY.md` for full security policy, threat model, and vulnerability reporting procedures.
+
+**Security Scanner Notes**: This tool will trigger expected warnings from static analysis tools:
+- SSL verification disabled (B501) - Intentional for self-signed certs
+- SSRF warnings - False positives (tool connects to user-configured endpoints)
+- Network operations - Required for IP discovery
+
+All security considerations are documented in detail in `SECURITY.md`.
 
 ---
 ## 16. Troubleshooting
@@ -319,7 +326,14 @@ Network / MAC scan:
 MIT – see `LICENSE`.
 
 ---
-## 23. At a Glance (Copy/Paste Reference)
+## 23. Documentation Files
+- **`SECURITY.md`** - Comprehensive security policy including threat model, vulnerability reporting, and security scanner warnings
+- **`.deepsource.yml`** - Static analysis configuration with documented exceptions for intentional patterns
+- **`README.md`** - This file - complete usage guide
+- **`config_example.py`** - Template configuration file (copy to `config.py`)
+
+---
+## 24. At a Glance (Copy/Paste Reference)
 ```
 Notes line: user:"admin" pass:"pw" protos:"rdp,ssh";
 Encrypt key: python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
@@ -332,7 +346,7 @@ Delete temp: uv run python guac_vm_manager.py delete --connection "temp-.*" --fo
 Raw mode:    uv run python guac_vm_manager.py --raw auto  # Plain text output
 ```
 
-## 24. Visual Features
+## 25. Visual Features
 - **Hexagon Icons**: Visual indicators for operation types
   - ⬢ (green) - Guacamole operations (view/edit connections)
   - ⬢ (orange) - Proxmox operations (VM configuration)

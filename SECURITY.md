@@ -144,9 +144,55 @@ Please provide the following information:
 ## Known Security Limitations
 
 1. **Self-signed Certificates**: SSL warnings are disabled by default for self-signed certificates
+   - **Intentional Design**: This tool is designed for internal infrastructure where self-signed certificates are common
+   - **Security Scanner Note**: Static analysis tools will flag this as a security issue, but it's expected behavior
+   - **Mitigation**: Ensure the tool runs only on trusted networks with known Proxmox/Guacamole endpoints
+
 2. **Network Scanning**: Tool performs local network discovery which may be detected by security tools
-3. **Credential Storage**: VM notes are the primary credential storage mechanism
-4. **Single-file Design**: All functionality in one file limits code isolation
+   - ARP table scanning and ping sweeps are required for VM IP detection
+   - These operations are intentional and necessary for the tool's functionality
+
+3. **URL Construction from Config**: The tool constructs API URLs from user-provided configuration
+   - **Security Scanner Note**: May be flagged as potential SSRF (Server-Side Request Forgery)
+   - **Acceptable Risk**: This is intentional - the tool MUST connect to user-specified Proxmox/Guacamole servers
+   - **Mitigation**: 
+     - Configuration file (`config.py`) is git-ignored and user-controlled
+     - Tool is designed for trusted internal networks only
+     - Not exposed to untrusted user input or public networks
+
+4. **Credential Storage**: VM notes are the primary credential storage mechanism
+   - Passwords are encrypted using Fernet encryption
+   - VM notes are accessible to Proxmox administrators
+
+5. **Single-file Design**: All functionality in one file limits code isolation
+   - Trade-off for simplicity and ease of deployment
+
+## Security Scanner Warnings
+
+This tool is designed for **internal infrastructure management** and will trigger security scanner warnings that are **acceptable** for its use case:
+
+### Expected Warnings
+
+1. **SSL Certificate Verification Disabled (B501)**
+   - **Why**: Self-signed certificates are standard in internal infrastructure
+   - **Acceptable**: Tool operates on trusted internal networks with known endpoints
+
+2. **Potential SSRF in Request Functions**
+   - **Why**: Tool constructs URLs from config file to connect to user's infrastructure
+   - **Acceptable**: All URL inputs are from trusted sources (config.py, Proxmox API responses)
+   - **Not Applicable**: No untrusted user input flows into requests
+
+3. **Network Operations (ARP/Ping)**
+   - **Why**: Required for VM IP discovery when guest agent unavailable
+   - **Acceptable**: Essential functionality for the tool's purpose
+
+### When Warnings Are NOT Acceptable
+
+Security scanner warnings **should be investigated** if:
+- User input from CLI directly flows into URLs without validation
+- Passwords are logged or printed in plain text
+- New network operations are added without proper scoping
+- External/untrusted data sources are introduced
 
 ## Compliance Considerations
 

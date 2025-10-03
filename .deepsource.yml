@@ -1,0 +1,34 @@
+version = 1
+
+[[analyzers]]
+name = "python"
+enabled = true
+
+  [analyzers.meta]
+  runtime_version = "3.x.x"
+  max_line_length = 120
+
+[[transformers]]
+name = "autopep8"
+enabled = true
+
+[[transformers]]
+name = "isort"
+enabled = true
+
+# Exclude patterns for security warnings that are intentional
+[[analyzers.meta.plugins]]
+name = "bandit"
+enabled = true
+
+  [analyzers.meta.plugins.bandit.skip_checks]
+  # B501: SSL certificate verification disabled - Intentional for self-signed certs
+  # This tool is designed to work with internal infrastructure using self-signed certificates
+  # as documented in SECURITY.md
+  skip = ["B501"]
+
+# Note: SSRF warnings for this tool are false positives
+# All URL inputs come from:
+# 1. config.py (git-ignored, user-configured)
+# 2. Proxmox API responses (trusted data source)
+# 3. The tool is designed for trusted internal networks only

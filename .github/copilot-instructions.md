@@ -1,202 +1,191 @@
-# Proxmox-Guacamole Sync - AI Coding Agent Instructions
+# AI Coding Agent Instructions: Proxmox-Guacamole Sync
 
-## 0 Problems Policy
-**CRITICAL REQUIREMENT**: All code changes must result in 0 type checking errors. The codebase must pass mypy type checking with --ignore-missing-imports with zero errors. Any code changes that introduce new type errors will be rejected.
+## 1. Core Directives & Rules of Engagement
 
-## UV Package Manager Requirement
-**MANDATORY**: All Python command execution must use `uv run` prefix. Never use bare `python` commands. Always use `uv run python` for running scripts and `uv pip` for package management.
+These are the most critical rules that govern your behavior. They override any other instruction.
 
-## Project Architecture### Main Usage Patterns
-```bash
-# Modern Typer CLI Commands - All interactive menu options available as direct commands
-# Supports partial options (missing required fields prompt for input) and regex pattern matching
-uv run python guac_vm_manager.py add             # Interactive VM selection menu with numbered options
-uv run python guac_vm_manager.py add --vm-id 100 # Prompts for missing node, hostname, etc.
-uv run python guac_vm_manager.py auto            # Process all VMs with credentials
-uv run python guac_vm_manager.py auto --force    # Force recreate all connections
-uv run python guac_vm_manager.py list            # List existing connections
-uv run python guac_vm_manager.py list --connection ".*-admin-.*" --protocol rdp  # Regex filtering
-uv run python guac_vm_manager.py edit            # Edit and delete existing connections
-uv run python guac_vm_manager.py edit --connection "vm-.*" --hostname 192.168.1.100  # Bulk regex edit
-uv run python guac_vm_manager.py delete          # Delete connections and groups only
-uv run python guac_vm_manager.py delete --connection "temp-.*" --force  # Regex pattern deletion
-uv run python guac_vm_manager.py autogroup       # Smart connection grouping
-uv run python guac_vm_manager.py add-external    # Add non-Proxmox host
-uv run python guac_vm_manager.py add-external --hostname server.com  # Prompts for missing fields
-uv run python guac_vm_manager.py test-auth       # Test API authentication
-uv run python guac_vm_manager.py test-network "MAC"  # Test network scanning
-uv run python guac_vm_manager.py debug-vms       # Debug VM discovery
-uv run python guac_vm_manager.py interactive     # Full interactive menu
-# Default (no command) runs interactive mode
-```his is a single-file Python tool (`guac_vm_manager.py`) that bridges Proxmox VE and Apache Guacamole by parsing VM credentials from Proxmox VM notes and automatically creating remote connections (RDP/VNC/SSH) in Guacamole.
+### 1.1. Ask First, Don't Guess (Principle of Certainty)
+**REQUIRED**: If you are not 100% certain about any of the following, you **MUST STOP** and ask for human clarification:
+* The safety implications of a security warning.
+* The correct or most effective way to fix an issue.
+* Whether a design pattern follows established best practices.
+* The user's specific requirements or intent.
 
-### Repository UI/Text Policy
-```his is a single-file Python tool (`guac_vm_manager.py`) that bridges Proxmox VE and Apache Guacamole by parsing VM credentials from Proxmox VM notes and automatically creating remote connections (RDP/VNC/SSH) in Guacamole.
+### 1.2. Think Critically, Verify Everything
+**REQUIRED**: When encountering warnings, errors, or potential security issues, you **MUST** follow this process:
+1.  **ASK**: If unsure about the severity, ask the human.
+2.  **RESEARCH**: Use the `vscode-websearchforcopilot_webSearch` tool to research the specific warning, error, or vulnerability pattern *before* drawing a conclusion.
+3.  **NEVER ASSUME**: Never self-declare that a problem is "acceptable" or a "false positive" without explicit human verification or strong evidence from research.
 
-### Repository UI/Text Policy
-- Emojis are NOT allowed in code or documentation output. Use neutral Unicode symbols when needed (examples: `●`, `○`, `*`, `✔`, `⚠`). This repository enforces a strict no-emoji rule for terminal interfaces, logs, and docs.
+**BAD Example**: *"These 16 security warnings are all false positives and acceptable for this use case..."*
 
-### Core Components
+**GOOD Example**: *"I found 16 security warnings. I will now research the 'B501' and 'SSRF' warning types. My initial research suggests B501 is related to SSL verification. I need clarification: Are you intentionally disabling SSL verification for self-signed certificates in a production context? This could be a security risk."*
 
-- **GuacamoleAPI**: Handles authentication, connection CRUD, and group management via REST API
-- **ProxmoxAPI**: Manages VM discovery, credential parsing from notes, and network scanning
-- **NetworkScanner**: Local network scanning to find VM IPs via ARP/ping when Proxmox doesn't have guest agent info
-- **WakeOnLan**: Built-in WoL implementation (no external dependencies)
+### 1.3. Use Web Search Aggressively
+**MANDATORY**: You **MUST** use the `vscode-websearchforcopilot_webSearch` tool to verify your understanding *before* making conclusions about:
+* Security warnings and their implications.
+* Library, framework, and language best practices.
+* API usage patterns and error handling.
+* The meaning and root cause of error messages.
 
-### Key Data Flow
+---
 
-1. **VM Discovery**: List VMs from all Proxmox nodes → Parse credentials from VM notes field
-2. **Network Resolution**: Find actual VM IP via network scanning (ARP table + ping sweep)
-3. **Connection Creation**: Create/update Guacamole connections with parsed credentials + WoL settings
-4. **Grouping**: Organize multiple users per VM into connection groups
+## 2. Absolute Prohibitions (NEVER Statements)
 
-## Critical Patterns
+### 2.1. NO Emojis
+**STRICTLY FORBIDDEN**: Do not use emojis in any output. This includes:
+* LLM responses to the user.
+* Code files (`.py`, `.yaml`, `.md`, etc.).
+* Documentation and code comments.
+* Terminal output.
+* Git commit messages.
 
-### VM Notes Credential Format
-The core feature parses flexible credential syntax from Proxmox VM notes:
-```
-user:"admin" pass:"password" protos:"rdp,ssh" rdp_port:"3390" confName:"{vmname}-{user}-{proto}";
-```
+**Rationale**: Emojis introduce visual noise, cause compatibility issues in terminals, and reduce the professionalism of this infrastructure tool.
 
-**Key parsing logic in `parse_credentials_from_notes()`:**
-- Parameters can be in ANY order
-- Multiple protocols per user line (comma-separated)
-- Template variables: `{vmname}`, `{user}`, `{proto}`, `{port}`, `{vmid}`, `{node}`, `{ip}`, `{hostname}`
-- Password encryption support via cryptography.fernet
+**Use neutral Unicode symbols instead**:
+* `●`, `○`, `*` for lists/bullets.
+* `✔`, `✓` for success indicators.
+* `✗`, `×` for failure indicators.
+* `⚠`, `!` for warnings.
+* `ℹ`, `i` for informational messages.
 
-### Config Pattern
-Uses a simple class-based config (`config.py` copied from `config_example.py`):
+**BANNED Behavior**: `🎉 Success! All connections synced!`
+**CORRECT Behavior**: `✓ Success! All connections synced!`
+
+### 2.2. NO "Everything is Fine" Scripts
+**STRICTLY FORBIDDEN**: Do not create Python scripts whose sole purpose is to validate existing code and report that "all is good" or "no issues were found." If checks are needed, use direct terminal commands.
+
+### 2.3. NO Summary or Status Files
+**STRICTLY FORBIDDEN**: Do not create repository files for the purpose of summarizing your own work, such as `SECURITY_SCANNER_FINDINGS.md`, `STATUS.md`, `REVIEW.md`, or `ANALYSIS.md`.
+
+**Rationale**: These files add clutter and provide no long-term value.
+
+---
+
+## 3. Project Technical Requirements
+
+### 3.1. Zero Type Errors
+**CRITICAL REQUIREMENT**: All code changes **MUST** result in zero type-checking errors. The codebase must pass `mypy --ignore-missing-imports` without any errors. Any change that introduces a new type error will be rejected.
+
+### 3.2. UV Package Manager Mandate
+**MANDATORY**: All Python-related commands **MUST** use the `uv` package manager.
+* For running scripts: `uv run python ...`
+* For package management: `uv pip ...`
+* Never use bare `python` or `pip` commands.
+
+---
+
+## 4. Project Overview & Architecture
+
+### 4.1. Project Goal
+This project is a single-file Python tool (`guac_vm_manager.py`) that synchronizes virtual machines from a Proxmox VE environment to an Apache Guacamole instance. It does this by parsing credential information stored in the Proxmox VM's "Notes" field and using it to create remote desktop connections (RDP, VNC, SSH) via the Guacamole API.
+
+### 4.2. System Architecture
+* **Core Components**:
+    * `GuacamoleAPI`: Manages authentication and CRUD operations for connections and groups.
+    * `ProxmoxAPI`: Discovers VMs and parses credentials from their notes.
+    * `NetworkScanner`: Finds VM IP addresses using ARP and ping when the Proxmox Guest Agent is unavailable.
+    * `WakeOnLan`: A native Python implementation for waking powered-off machines.
+* **Key Data Flow**:
+    1.  **Discover**: Fetch all VMs from Proxmox.
+    2.  **Parse**: Extract credential configurations from each VM's notes.
+    3.  **Resolve**: Determine the VM's IP address, first via the Guest Agent, then falling back to network scanning.
+    4.  **Sync**: Create or update the corresponding connection and connection group in Guacamole.
+
+### 4.3. Critical Implementation Patterns
+* **VM Notes Credential Format**: The core logic relies on parsing a flexible key-value format from the Proxmox VM notes.
+    ```
+    user:"admin" pass:"password" protos:"rdp,ssh" rdp_port:"3390" confName:"{vmname}-{user}-{proto}";
+    ```
+    * **Logic**: Located in `parse_credentials_from_notes()`.
+    * **Features**: Order-independent parameters, multiple protocols, and template variables (`{vmname}`, `{user}`, `{vmid}`, etc.).
+* **Configuration**: A simple class-based configuration is loaded from `config.py` (copied from `config_example.py`).
+* **API Resilience**: Both API clients attempt multiple endpoint paths and data sources before failing, ensuring graceful handling of different Guacamole/Proxmox versions.
+* **PVE Source Tracking**: The script caches a mapping of Guacamole connections to their source Proxmox nodes to provide context in listings and prevent duplicate processing.
+
+---
+
+## 5. Development & CLI Reference
+
+### 5.1. Development & Testing Workflow
+* **Setup**:
+    ```bash
+    # 1. Create and edit your configuration file
+    cp config_example.py config.py
+
+    # 2. Install dependencies using uv
+    uv pip install -r requirements.txt
+    ```
+* **Core Testing Commands**:
+    ```bash
+    # Test API authentication to both services
+    uv run python guac_vm_manager.py test-auth
+
+    # Debug the VM discovery and credential parsing process
+    uv run python guac_vm_manager.py debug-vms
+
+    # Test the network scanner for a specific MAC address
+    uv run python guac_vm_manager.py test-network "aa:bb:cc:dd:ee:ff"
+    ```
+
+### 5.2. CLI Usage Patterns & Features
+The tool uses `Typer` to provide a modern CLI with subcommands and rich help.
+* **Key Commands**:
+    ```bash
+    # Run the full interactive menu (default action)
+    uv run python guac_vm_manager.py interactive
+
+    # Automatically sync all VMs with credentials
+    uv run python guac_vm_manager.py auto
+    uv run python guac_vm_manager.py auto --force
+
+    # Add a single VM via an interactive menu
+    uv run python guac_vm_manager.py add
+
+    # List connections with regex filtering
+    uv run python guac_vm_manager.py list --connection ".*-admin-.*" --protocol rdp
+
+    # Edit or delete connections/groups with regex and force flags
+    uv run python guac_vm_manager.py edit --connection "vm-.*" --hostname 192.168.1.100
+    uv run python guac_vm_manager.py delete --connection "temp-.*" --force
+
+    # Add a non-Proxmox host
+    uv run python guac_vm_manager.py add-external --hostname server.com
+    ```
+* **CLI Enhancements**:
+    * **Partial Option Support**: If a command is run with missing required options (e.g., `add --vm-id 100`), it will prompt the user for the missing information instead of failing.
+    * **Advanced Pattern Matching**: Most commands support regex and comma-separated patterns for bulk operations on connections and groups.
+
+---
+
+## 6. Project Conventions & Style
+
+### 6.1. Code Architecture
+* **Single-File Architecture**: All core logic resides within `guac_vm_manager.py`. Maintain this convention.
+* **Minimal Dependencies**: `requests`, `urllib3`, `cryptography`, `typer`, `rich`.
+* **No ORM**: All API interaction is done via direct REST calls and manual JSON handling.
+
+### 6.2. UI/UX and Output
+* **Rich Output**: The script uses the `rich` library for formatted tables, panels, and progress indicators.
+* **Raw Mode**: A global `--raw` flag or `GUAC_RAW_MODE=1` environment variable disables all rich formatting for use in logs, CI/CD, or accessibility tools.
+* **Animations**: A simple `⬢ → ⬢→⬢ → ⬢` animation provides visual feedback during sync operations. It is automatically disabled in raw mode.
+
+### 6.3. Error Handling & State Management
+* **Progressive Fallback**: The preferred style is to try multiple methods before failing (e.g., API endpoints, IP discovery methods).
+* **VM State Management**: The script can automatically start stopped VMs to perform network scans and restores them to their original power state afterward.
+
+### 6.4. Security Patterns
+* **Credential Isolation**: The `config.py` file is git-ignored. Sensitive credentials for remote machines are stored exclusively in the Proxmox VM notes.
+* **Password Encryption**: The tool supports optional Fernet-based encryption for passwords stored in the notes.
+* **SSL**: SSL certificate verification is disabled by default to support environments with self-signed certificates.
+
+---
+
+## 7. Code-Specific Directives
+
+The following Pylint disable comment **MUST** be present at the top of the `guac_vm_manager.py` file to reduce noise from intentional design patterns (like late imports for performance).
+
 ```python
-class Config:
-    GUAC_BASE_URL = "https://guacamole-server.com"
-    PROXMOX_HOST = "192.168.1.100"
-    PROXMOX_TOKEN_ID = "root@pam!tokenname"
-    # ...
-```
-
-### API Resilience
-Both APIs implement endpoint fallback patterns:
-- **Guacamole**: Tries multiple data sources (mysql/postgresql) and paths (/guacamole/api vs /api) with clean authentication UI
-- **Proxmox**: Token-based auth with proper error handling for missing guest agents
-
-### PVE Source Tracking
-- **VM Notes Integration**: Tracks PVE source by parsing VM notes to find which connections originated from which Proxmox node
-- **Visual Identification**: Connection listing shows PVE source to distinguish VM-created connections from manual ones
-- **Efficient Caching**: Pre-builds connection-to-node mapping for fast display without repeated API calls
-- **Future-proofing**: Supports mixed environments with both Proxmox and manually added connections
-
-## Development Workflows
-
-### Setup & Testing
-```bash
-# Setup (uses UV package manager)
-cp config_example.py config.py  # Edit with real credentials
-uv pip install -r requirements.txt
-
-# Core testing commands
-uv run python guac_vm_manager.py --test-auth      # Test both API connections
-uv run python guac_vm_manager.py --debug-vms     # Debug VM discovery
-uv run python guac_vm_manager.py --test-network "aa:bb:cc:dd:ee:ff"  # Test network scanning
-```
-
-### Main Usage Patterns
-```bash
-# Modern Typer CLI Commands - All interactive menu options available as direct commands
-# Supports partial options (missing required fields prompt for input) and regex pattern matching
-uv run python guac_vm_manager.py add             # Interactive VM selection menu with numbered options
-uv run python guac_vm_manager.py add --vm-id 100 # Prompts for missing node, hostname, etc.
-uv run python guac_vm_manager.py auto            # Process all VMs with credentials
-uv run python guac_vm_manager.py auto --force    # Force recreate all connections
-uv run python guac_vm_manager.py list            # List existing connections
-uv run python guac_vm_manager.py list --connection ".*-admin-.*" --protocol rdp  # Regex filtering
-uv run python guac_vm_manager.py edit            # Edit and delete existing connections
-uv run python guac_vm_manager.py edit --connection "vm-.*" --hostname 192.168.1.100  # Bulk regex edit
-uv run python guac_vm_manager.py delete          # Delete connections and groups only
-uv run python guac_vm_manager.py delete --connection "temp-.*" --force  # Regex pattern deletion
-uv run python guac_vm_manager.py autogroup       # Smart connection grouping
-uv run python guac_vm_manager.py add-external    # Add non-Proxmox host
-uv run python guac_vm_manager.py add-external --hostname server.com  # Prompts for missing fields
-uv run python guac_vm_manager.py test-auth       # Test API authentication
-uv run python guac_vm_manager.py test-network "MAC"  # Test network scanning
-uv run python guac_vm_manager.py debug-vms       # Debug VM discovery
-uv run python guac_vm_manager.py interactive     # Full interactive menu
-# Default (no command) runs interactive mode
-```
-
-### Key CLI Enhancements
-
-**Partial Option Support:**
-- Commands accept incomplete options and prompt for missing required fields
-- Example: `add --vm-id 100` prompts for node, hostname, etc. instead of failing
-- Enables better automation workflows with user-friendly fallbacks
-
-**Advanced Pattern Matching:**
-- Regex support for connection, VM, and group name filtering
-- Comma-separated multiple patterns: `"pattern1,pattern2,pattern3"`
-- Wildcard support: `"*-admin-*"` or `"web-server-*"`
-- Bulk operations on matching connections/groups
-
-**New Command Options:**
-- `list --connection ".*-admin-.*" --protocol rdp --status ok`
-- `edit --connection "vm-.*" --hostname new-server.com --force`
-- `delete --connection "temp-.*" --group "Legacy.*" --force`
-- `add-external --hostname server.com` (prompts for missing fields)
-
-### VM State Management
-- **Auto-Start**: Automatically starts stopped VMs during setup for IP detection
-- **State Restoration**: Restores VMs to original power state after connection creation
-- **30-second Boot Wait**: Built-in delay for network interface initialization
-
-## Project-Specific Conventions
-
-### Modern CLI Architecture
-- **Single-file architecture**: All logic in `guac_vm_manager.py` (9800+ lines)
-- **Typer CLI**: Modern command-line interface with subcommands and rich help
-- **Rich Output**: Colorful tables, panels, and progress indicators with clean authentication status
-- **Raw Mode**: Global `--raw` flag or `GUAC_RAW_MODE=1` env var for plain text output
-  - Disables colors, animations, hexagon icons, and Rich formatting
-  - Perfect for automation, logging, CI/CD pipelines, and screen readers
-  - All functionality identical in both modes
-- **Hexagon Sync Animations**: Visual feedback during Proxmox→Guacamole operations
-  - 4-frame animation: ⬢ (Proxmox) → ⬢→⬢ (transfer) → ⬢ (Guacamole)
-  - Automatic raw mode detection
-- **Minimal dependencies**: requests, urllib3, cryptography, typer, rich
-- **No ORM/framework**: Direct REST API calls with manual JSON handling
-- **Silent Authentication**: Clean endpoint probing with professional status display
-
-### Error Handling Style
-Uses **progressive fallback** rather than strict validation:
-- Multiple API endpoint attempts before failing
-- Network scanning with ARP + ping combination
-- Graceful degradation when guest agents unavailable
-
-### Security Patterns
-- **Password encryption**: Optional Fernet encryption for passwords stored in VM notes
-- **SSL warnings disabled**: Self-signed certificate support for both APIs
-- **Credential isolation**: config.py git-ignored, sensitive data in VM notes only
-
-## Integration Points
-
-### Proxmox Integration
-- **VM Notes Field**: Primary credential storage (user-editable in Proxmox web UI)
-- **Guest Agent**: Optional for IP detection, falls back to network scanning
-- **API Tokens**: Preferred over username/password auth
-
-### Guacamole Integration
-- **Connection Groups**: Auto-created per VM (named after VM) to organize all users
-- **Protocol Support**: RDP, VNC, SSH with protocol-specific settings
-- **Update Logic**: Smart detection of existing connections to avoid duplicates
-- **Grouping Logic**: All connections for a VM are organized under VM-named groups
-
-### Network Dependencies
-- **Local Network Scanning**: Assumes tool runs on same network as VMs
-- **Wake-on-LAN**: Direct UDP broadcast to wake powered-off VMs before connecting
-
-## Testing Structure
-- **Not Done yet**
-
-When modifying this codebase, maintain the single-file architecture and focus on the credential parsing logic as the core differentiator.
-
 # Pylint: some imports intentionally live inside functions to avoid heavy startup
 # or circular imports. Also some 'pass' statements are used intentionally to
 # silence non-critical exceptions in probing code paths. Disable the following
