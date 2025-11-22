@@ -96,19 +96,21 @@ First run discovers/locks working Guacamole API base path & data source variants
 ---
 ## 7. Essential Commands
 ```bash
-uv run python guac_vm_manager.py test-auth      # Validate both APIs & encryption key
-uv run python guac_vm_manager.py auto           # Process all VMs with credential notes
-uv run python guac_vm_manager.py add            # Interactive VM picker
-uv run python guac_vm_manager.py add-external   # Non-Proxmox host
-uv run python guac_vm_manager.py list           # List + status flags
-uv run python guac_vm_manager.py edit           # Bulk edit by pattern
-uv run python guac_vm_manager.py delete         # Interactive / pattern delete
-uv run python guac_vm_manager.py autogroup      # Group connections intelligently
-uv run python guac_vm_manager.py test-network <MAC>
+uv run python guac_vm_manager.py test-auth         # Validate both APIs & encryption key
+uv run python guac_vm_manager.py auto              # Process all VMs with credential notes
+uv run python guac_vm_manager.py add               # Interactive VM picker
+uv run python guac_vm_manager.py add-external      # Non-Proxmox host
+uv run python guac_vm_manager.py list              # List + status flags
+uv run python guac_vm_manager.py edit              # Bulk edit by pattern
+uv run python guac_vm_manager.py delete            # Interactive / pattern delete
+uv run python guac_vm_manager.py autogroup         # Group connections intelligently
+uv run python guac_vm_manager.py test-network <MAC>           # Test network scanning for MAC
+uv run python guac_vm_manager.py test-connectivity            # Test protocol authentication
+uv run python guac_vm_manager.py test-connectivity --no-test-auth  # Quick socket test
 
 # Use --raw flag for plain text (no colors/animations) - great for automation
-uv run python guac_vm_manager.py --raw auto     # Plain text sync output
-uv run python guac_vm_manager.py --raw list     # Plain text connection list
+uv run python guac_vm_manager.py --raw auto        # Plain text sync output
+uv run python guac_vm_manager.py --raw list        # Plain text connection list
 # Also supports GUAC_RAW_MODE=1 environment variable
 ```
 No subcommand = interactive menu.
@@ -224,10 +226,74 @@ Useful commands:
 uv run python guac_vm_manager.py test-auth
 uv run python guac_vm_manager.py debug-vms
 uv run python guac_vm_manager.py test-network "AA:BB:CC:DD:EE:FF"
+uv run python guac_vm_manager.py test-connectivity --protocol rdp
+uv run python guac_vm_manager.py test-connectivity --connection ".*prod.*" --verbose
+uv run python guac_vm_manager.py test-connectivity --no-test-auth  # Fast socket-only test
 ```
 
 ---
-## 17. Architecture (Internal Overview)
+## 17. Connectivity Testing
+The `test-connectivity` command performs **protocol-level authentication testing** to verify that your Guacamole connections can actually reach and authenticate to their target hosts. Unlike simple port scanning, this validates actual protocol handshakes and credential authentication.
+
+**Key Features:**
+* **Protocol-Level Authentication Testing**: Validates SSH, RDP (via WinRM), and VNC connections with actual credentials
+* **Fallback Socket Testing**: Tests port connectivity when protocol libraries unavailable or `--no-test-auth` specified
+* **Interactive TUI Mode**: Guided interface with filtering options and detailed results
+* **CLI Mode**: Full command-line control with regex filtering and protocol selection
+* Configurable timeout for responsive testing
+* Reports connection latency and authentication status for each test
+* Provides detailed error diagnostics for failures
+* Exits with error code 1 if any tests fail (perfect for CI/CD)
+
+**Usage Examples:**
+```bash
+# Interactive mode (guided TUI with filtering)
+uv run python guac_vm_manager.py interactive
+# Then select option 3: "Test connection connectivity"
+
+# CLI: Test all connections with protocol authentication
+uv run python guac_vm_manager.py test-connectivity
+
+# Test only RDP connections with authentication
+uv run python guac_vm_manager.py test-connectivity --protocol rdp
+
+# Test specific connection pattern with custom timeout
+uv run python guac_vm_manager.py test-connectivity --connection "prod-.*" --timeout 10.0
+
+# Socket-only test (no authentication, faster)
+uv run python guac_vm_manager.py test-connectivity --no-test-auth
+
+# Verbose output for failed connections
+uv run python guac_vm_manager.py test-connectivity --verbose
+
+# Combine all options
+uv run python guac_vm_manager.py test-connectivity --connection "web-.*" --protocol ssh --timeout 5.0 --verbose
+```
+
+**Output:**
+* Summary table showing connection name, protocol, endpoint, status (✓/✗), authentication result, and latency
+* Success/failure counts with authentication status breakdown
+* Optional detailed error diagnostics with `--verbose`
+
+**Authentication Results:**
+* `Auth OK` - Protocol authentication successful with provided credentials
+* `Auth Failed` - Credentials rejected by target service
+* `Port Open` - Socket connected but authentication not tested
+* `Port Closed` - Cannot connect to target port
+* `Timeout` - Connection attempt exceeded timeout period
+* `DNS Error` - Hostname resolution failed
+* `Config Error` - Missing required connection parameters
+
+**Protocol-Specific Testing:**
+* **SSH**: Uses paramiko to test actual SSH authentication (install with: `uv pip install paramiko`)
+* **RDP**: Tests WinRM authentication as proxy for RDP credentials (install with: `uv pip install pywinrm`)
+* **VNC**: Validates VNC protocol handshake and security negotiation
+* **Other Protocols**: Falls back to socket connectivity test
+
+**Note:** Protocol authentication testing validates that credentials work at the protocol level. This is more thorough than port scanning and catches authentication issues before users attempt connections through Guacamole.
+
+---
+## 18. Architecture (Internal Overview)
 Component summary (all in one file):
 | Component       | Responsibility |
 |-----------------|---------------|
@@ -238,6 +304,7 @@ Component summary (all in one file):
 | WakeOnLan       | UDP broadcast magic packet generation |
 | Grouping Engine | Pattern heuristics to form logical groups |
 | CLI Layer       | Typer commands + interactive menu rendering |
+| ConnectivityTest| Protocol-level authentication testing (SSH/RDP/VNC) + socket fallback |
 
 Design principles:
 * Stateless between runs (except cached working Guac path)
@@ -245,11 +312,12 @@ Design principles:
 * No external daemons; all transient operations
 
 ---
-## 18. Development
+## 19. Development
 ```bash
 uv sync
 uv run python guac_vm_manager.py --debug-vms
 uv run python guac_vm_manager.py test-network "<mac>"
+uv run python guac_vm_manager.py test-connectivity
 pytest   # If you add tests
 ```
 Coding guidelines:
@@ -259,14 +327,14 @@ Coding guidelines:
 * Do not commit real credentials; `config.py` is git-ignored
 
 ---
-## 19. Extending
+## 20. Extending
 Where to hook:
 * Add new protocol: extend parser (port + settings), adjust GuacamoleAPI create/update mapping
 * Add export format: extend list command output branch
 * Enhance grouping: modify heuristic scorer in grouping section
 
 ---
-## 20. Guacamole Deployment (Reference)
+## 21. Guacamole Deployment (Reference)
 Minimal compose (host networking for WoL broadcast):
 ```yaml
 version: "3"
@@ -283,7 +351,7 @@ volumes:
 Use Cloudflare Tunnel or reverse proxy for external exposure if needed.
 
 ---
-## 21. Output Examples
+## 22. Output Examples
 Help (global):
 ![Help](assets/help-output.svg)
 
@@ -322,23 +390,26 @@ Network / MAC scan:
 ![Network Scan](assets/network-discovery-output.svg)
 
 ---
-## 22. License
+## 23. License
 MIT – see `LICENSE`.
 
 ---
-## 23. Documentation Files
+## 24. Documentation Files
 - **`SECURITY.md`** - Comprehensive security policy including threat model, vulnerability reporting, and security scanner warnings
 - **`.deepsource.yml`** - Static analysis configuration with documented exceptions for intentional patterns
 - **`README.md`** - This file - complete usage guide
 - **`config_example.py`** - Template configuration file (copy to `config.py`)
 
 ---
-## 24. At a Glance (Copy/Paste Reference)
+## 25. At a Glance (Copy/Paste Reference)
 ```
-Notes line: user:"admin" pass:"pw" protos:"rdp,ssh";
+Notes line:  user:"admin" pass:"pw" protos:"rdp,ssh";
 Encrypt key: python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
 Sync all:    uv run python guac_vm_manager.py auto
 Test auth:   uv run python guac_vm_manager.py test-auth
+Test connect:uv run python guac_vm_manager.py test-connectivity
+Test RDP:    uv run python guac_vm_manager.py test-connectivity --protocol rdp
+Quick test:  uv run python guac_vm_manager.py test-connectivity --no-test-auth
 Find MAC:    uv run python guac_vm_manager.py test-network "AA:BB:CC:DD:EE:FF"
 List RDP:    uv run python guac_vm_manager.py list --protocol rdp
 Bulk edit:   uv run python guac_vm_manager.py edit --connection "web-.*" --username ops
@@ -346,7 +417,7 @@ Delete temp: uv run python guac_vm_manager.py delete --connection "temp-.*" --fo
 Raw mode:    uv run python guac_vm_manager.py --raw auto  # Plain text output
 ```
 
-## 25. Visual Features
+## 26. Visual Features
 - **Hexagon Icons**: Visual indicators for operation types
   - ⬢ (green) - Guacamole operations (view/edit connections)
   - ⬢ (orange) - Proxmox operations (VM configuration)

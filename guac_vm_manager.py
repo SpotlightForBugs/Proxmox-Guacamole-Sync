@@ -40,7 +40,9 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.prompt import Confirm, Prompt, FloatPrompt
+import questionary  # type: ignore[import-untyped]
 from concurrent.futures import Future
 
 # Pylint: some imports intentionally live inside functions to avoid heavy startup
@@ -48,6 +50,35 @@ from concurrent.futures import Future
 # silence non-critical exceptions in probing code paths. Disable the following
 # checks at module level to reduce noisy warnings.
 # pylint: disable=import-outside-toplevel, unnecessary-pass
+
+# Cross-platform readline compatibility shim
+# Windows doesn't have readline in stdlib; provide a minimal compatible interface
+try:
+    import readline
+except ImportError:
+    try:
+        import pyreadline as readline  # type: ignore[import-untyped]
+    except ImportError:
+        # Create a minimal shim with no-op methods
+        import types
+
+        class _ReadlineShim:
+            """Minimal readline-compatible shim for platforms without readline support."""
+
+            @staticmethod
+            def get_completer() -> None:
+                return None
+
+            @staticmethod
+            def set_completer(completer: Any) -> None:
+                pass
+
+            @staticmethod
+            def parse_and_bind(string: str) -> None:
+                pass
+
+        readline = _ReadlineShim()  # type: ignore[assignment]
+        sys.modules['readline'] = readline  # type: ignore[assignment]
 
 # Global verbose flags (set by Typer commands)
 verbose_mode = False
@@ -796,8 +827,7 @@ def enhanced_input(
     prompt: str, default: str = "", suggestions: Optional[List[str]] = None
 ) -> str:
     """Enhanced input function with basic completion support"""
-    import readline
-
+    # Use module-level readline (includes cross-platform shim)
     # Set up completion if suggestions are provided
     if suggestions:
 
@@ -1868,7 +1898,11 @@ class GuacamoleAPI:
                         parameters = cast(Dict[str, Any], params_response.json())
                         connection_info["parameters"] = parameters
                     else:
-                        connection_info["parameters"] = {}
+                        # If parameters endpoint fails, check if connection_info has parameters embedded
+                        if "parameters" not in connection_info:
+                            connection_info["parameters"] = {}
+                        if verbose_mode:
+                            print(f"Warning: Could not fetch parameters for connection {connection_id}: {params_response.status_code}")
 
                     return connection_info
                 if response.status_code == 404:
@@ -7506,8 +7540,8 @@ def delete_connections_interactive() -> bool:
     for item in selected_items:
         console.print(f"  • {item['display']}")
 
-    confirm = input(
-        f"\nType 'DELETE' to confirm deletion of {len(selected_items)} item(s): "
+    confirm = Prompt.ask(
+        f"\n[red]Type 'DELETE' to confirm deletion of {len(selected_items)} item(s)[/red]"
     ).strip()
 
     if confirm != "DELETE":
@@ -7554,6 +7588,546 @@ def delete_connections_interactive() -> bool:
 
     input("\nPress Enter to continue...")
     return True
+
+
+def _build_connection_to_vm_mapping(
+    config: Config, guac_api: GuacamoleAPI
+) -> Dict[str, Tuple[str, int]]:
+    """Build mapping from connection name to Proxmox VM info (node, vmid).
+
+    Returns:
+        Dict mapping connection name to (node_name, vm_id) tuple
+    """
+    connection_to_vm_info: Dict[str, Tuple[str, int]] = {}
+
+    try:
+        proxmox_api = ProxmoxAPI(config)
+        all_vms = proxmox_api.get_vms()
+
+        # Group VMs by node
+        vms_by_node: Dict[str, List[Dict[str, Any]]] = {}
+        for vm in all_vms:
+            node_name = vm.get("node")
+            if node_name:
+                if node_name not in vms_by_node:
+                    vms_by_node[node_name] = []
+                vms_by_node[node_name].append(vm)
+
+        # Build connection name to VM mapping
+        for node_name, vms in vms_by_node.items():
+            for vm in vms:
+                vm_id = vm.get("vmid")
+                vm_name = vm.get("name", "")
+
+                if vm_id is not None:
+                    try:
+                        vm_config = proxmox_api.get_vm_config(node_name, vm_id)
+                        notes = vm_config.get("description", "")
+
+                        if notes:
+                            try:
+                                parsed_creds = proxmox_api.parse_credentials_from_notes(
+                                    notes,
+                                    vm_name,
+                                    str(vm_id),
+                                    node_name,
+                                    prompt_on_decrypt_failure=False,
+                                )
+                            except CredentialRecoveryPending:
+                                parsed_creds = []
+
+                            for cred in parsed_creds:
+                                connection_name = cred.get("connection_name")
+                                if connection_name and vm_id is not None:
+                                    connection_to_vm_info[connection_name] = (
+                                        node_name,
+                                        vm_id,
+                                    )
+                    except Exception:
+                        continue
+    except Exception:
+        # If Proxmox is not accessible, return empty mapping
+        pass
+
+    return connection_to_vm_info
+
+
+def _ensure_proxmox_vm_running(
+    config: Config,
+    proxmox_api: ProxmoxAPI,
+    node_name: str,
+    vm_id: int,
+    connection_name: str,
+    timeout: float,
+) -> Tuple[bool, str]:
+    """Ensure Proxmox VM is running, starting it if necessary.
+
+    Args:
+        config: Configuration object
+        proxmox_api: ProxmoxAPI instance
+        node_name: Proxmox node name
+        vm_id: VM ID
+        connection_name: Connection name for display
+        timeout: Base timeout for connectivity test
+
+    Returns:
+        Tuple of (success, error_message)
+    """
+    try:
+        # Check VM status
+        vm_status = proxmox_api.get_vm_status(node_name, vm_id)
+        status = vm_status.get("status", "unknown")
+
+        # Only start VM if it's actually stopped
+        if status == "running":
+            # VM is already running, no action needed
+            if verbose_mode:
+                if raw_mode:
+                    print(f"VM {vm_id} is already running, skipping start")
+                else:
+                    console.print(
+                        f"[dim]⬢ VM {vm_id} is already running, skipping start[/dim]"
+                    )
+            return True, ""
+
+        # VM is not running (stopped, paused, etc.), use Wake-on-LAN
+        if raw_mode:
+            print(f"VM status: '{status}' - Attempting Wake-on-LAN for VM {vm_id} on node {node_name} (connection '{connection_name}')...")
+        else:
+            console.print(
+                f"[yellow]⬢ VM status: '{status}' - Attempting Wake-on-LAN for VM {vm_id} on node {node_name} (connection '{connection_name}')...[/yellow]"
+            )
+
+        # Get VM's MAC address from network configuration
+        vm_network_info = proxmox_api.get_vm_network_info(node_name, vm_id)
+        if not vm_network_info:
+            return False, "Could not retrieve VM network info for WoL"
+
+        # Get the first MAC address
+        mac_address = None
+        for net_if in vm_network_info:
+            mac = net_if.get("mac")
+            if mac:
+                mac_address = mac
+                break
+
+        if not mac_address:
+            return False, "No MAC address found for WoL"
+
+        # Send WoL packet
+        if raw_mode:
+            print(f"Sending Wake-on-LAN packet to MAC {mac_address}...")
+        else:
+            console.print(
+                f"[cyan]⬢ Sending Wake-on-LAN packet to MAC {mac_address}...[/cyan]"
+            )
+
+        if not WakeOnLan.send_wol_packet(mac_address):
+            return False, "Failed to send WoL packet"
+
+        # Wait for VM to boot after WoL with extended timeout
+        boot_timeout = getattr(config, 'PROXMOX_VM_BOOT_TIMEOUT', 120)
+        check_interval = getattr(config, 'PROXMOX_VM_BOOT_CHECK_INTERVAL', 5)
+        elapsed = 0
+
+        if raw_mode:
+            print(f"Waiting up to {boot_timeout}s for VM to boot after WoL (checking every {check_interval}s)...")
+        else:
+            console.print(
+                f"[cyan]⬢ Waiting up to {boot_timeout}s for VM to boot after WoL (checking every {check_interval}s)...[/cyan]"
+            )
+
+        while elapsed < boot_timeout:
+            time.sleep(check_interval)
+            elapsed += check_interval
+
+            vm_status = proxmox_api.get_vm_status(node_name, vm_id)
+            status = vm_status.get("status", "unknown")
+
+            if status == "running":
+                # Give it a bit more time for network services to start
+                time.sleep(5)
+
+                if raw_mode:
+                    print(f"VM woke up and is now running (took {elapsed}s after WoL)")
+                else:
+                    console.print(
+                        f"[green]✓ VM woke up and is now running (took {elapsed}s after WoL)[/green]"
+                    )
+                return True, ""
+
+            if not raw_mode and elapsed % 10 == 0:
+                console.print(f"[dim]Still waiting... ({elapsed}/{boot_timeout}s)[/dim]")
+
+        return False, f"VM boot timeout after {boot_timeout}s (WoL may have failed or VM boot is slow)"
+
+    except Exception as e:
+        return False, f"Error during WoL wake-up: {str(e)}"
+
+
+def interactive_connectivity_test() -> None:
+    """Interactive connectivity testing with filtering options"""
+    config = Config()
+    guac_api = GuacamoleAPI(config)
+
+    if not guac_api.authenticate():
+        console.print(
+            Panel("⬢ Failed to authenticate with Guacamole", border_style="red")
+        )
+        return
+
+    console.print(
+        Panel.fit(
+            "⬢ Connection Connectivity Test",
+            border_style="cyan",
+            title="Test Configuration",
+        )
+    )
+
+    # Get filter options
+    console.print("\n[bold]Test Configuration:[/bold]\n")
+
+    # Connection pattern with optional input
+    connection_pattern = Prompt.ask(
+        "[cyan]Connection name pattern (regex)[/cyan]",
+        default="",
+        show_default=False
+    ).strip()
+    if not connection_pattern:
+        connection_pattern = None
+
+    # Protocol filter with arrow key selection (works on Windows!)
+    protocol_filter = questionary.select(
+        "Protocol filter:",
+        choices=["All protocols", "RDP only", "SSH only", "VNC only"],
+        default="All protocols",
+        style=questionary.Style([
+            ('qmark', 'fg:cyan bold'),
+            ('question', 'fg:cyan bold'),
+            ('answer', 'fg:green bold'),
+            ('pointer', 'fg:cyan bold'),
+            ('highlighted', 'fg:cyan bold'),
+            ('selected', 'fg:green'),
+        ])
+    ).ask()
+
+    # Convert to filter value
+    if protocol_filter == "RDP only":
+        protocol_filter = "rdp"
+    elif protocol_filter == "SSH only":
+        protocol_filter = "ssh"
+    elif protocol_filter == "VNC only":
+        protocol_filter = "vnc"
+    else:
+        protocol_filter = None
+
+    # Test authentication (graphical yes/no with arrow keys)
+    test_auth = questionary.confirm(
+        "Test actual protocol authentication?",
+        default=True,
+        style=questionary.Style([
+            ('qmark', 'fg:cyan bold'),
+            ('question', 'fg:cyan bold'),
+            ('answer', 'fg:green bold'),
+        ])
+    ).ask()
+
+    # Timeout with float input
+    timeout = FloatPrompt.ask(
+        "[cyan]Connection timeout in seconds[/cyan]",
+        default=5.0,
+        show_default=True
+    )
+
+    # Verbose output (graphical yes/no with arrow keys)
+    verbose = questionary.confirm(
+        "Verbose output for failures?",
+        default=False,
+        style=questionary.Style([
+            ('qmark', 'fg:cyan bold'),
+            ('question', 'fg:cyan bold'),
+            ('answer', 'fg:green bold'),
+        ])
+    ).ask()
+
+    # Ask about Proxmox VM auto-start (graphical yes/no with arrow keys)
+    auto_start_vms = questionary.confirm(
+        "Auto-start stopped Proxmox VMs during test?",
+        default=True,
+        style=questionary.Style([
+            ('qmark', 'fg:cyan bold'),
+            ('question', 'fg:cyan bold'),
+            ('answer', 'fg:green bold'),
+        ])
+    ).ask()
+
+    console.print("\n[dim]Starting connectivity test...[/dim]\n")
+
+    # Get all connections
+    connections = guac_api.get_connections()
+
+    if not connections:
+        console.print("[yellow]No connections found[/yellow]")
+        console.input("\n[dim]Press Enter to continue...[/dim]")
+        return
+
+    # Build connection-to-VM mapping for Proxmox VMs
+    connection_to_vm_info: Dict[str, Tuple[str, int]] = {}
+    proxmox_api = None
+    if auto_start_vms:
+        console.print("[dim]Building Proxmox VM mapping...[/dim]")
+        connection_to_vm_info = _build_connection_to_vm_mapping(config, guac_api)
+        if connection_to_vm_info:
+            console.print(
+                f"[dim]Found {len(connection_to_vm_info)} Proxmox-managed connections[/dim]"
+            )
+            proxmox_api = ProxmoxAPI(config)
+
+    # Filter connections and fetch detailed parameters
+    filtered_connections = []
+    console.print(f"\n[dim]Fetching connection details...[/dim]\n")
+
+    for conn_id, conn_data in connections.items():
+        conn_name = conn_data.get("name", "")
+        conn_protocol = conn_data.get("protocol", "")
+
+        # Apply filters
+        if connection_pattern:
+            if not re.search(connection_pattern, conn_name, re.IGNORECASE):
+                continue
+
+        if protocol_filter:
+            if conn_protocol.lower() != protocol_filter.lower():
+                continue
+
+        # Fetch detailed connection parameters
+        detailed_conn = guac_api.get_connection_details(conn_id)
+        if detailed_conn:
+            filtered_connections.append((conn_id, detailed_conn))
+        else:
+            # Fallback to basic data if details fetch fails
+            filtered_connections.append((conn_id, conn_data))
+
+    if not filtered_connections:
+        console.print("[yellow]No connections match the specified filters[/yellow]")
+        console.input("\n[dim]Press Enter to continue...[/dim]")
+        return
+
+    test_mode = "Protocol Authentication" if test_auth else "Socket Connectivity"
+    console.print(f"[bold]Testing {len(filtered_connections)} connection(s) - Mode: {test_mode}[/bold]\n")
+
+    # Test each connection
+    results = []
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Testing connections...", total=len(filtered_connections))
+
+        for conn_id, conn_data in filtered_connections:
+            conn_name = conn_data.get("name", "Unknown")
+            conn_protocol = conn_data.get("protocol", "unknown")
+            parameters = conn_data.get("parameters", {})
+
+            # Extract connection parameters with fallbacks for different Guacamole versions
+            hostname = parameters.get("hostname") or parameters.get("host") or ""
+            port = parameters.get("port") or ""
+            username = parameters.get("username") or parameters.get("user") or ""
+            password = parameters.get("password") or parameters.get("passwd") or ""
+
+            # If parameters are missing, try to get from top-level connection data
+            if not hostname:
+                hostname = conn_data.get("hostname", "")
+            if not port:
+                port = conn_data.get("port", "")
+            if not username:
+                username = conn_data.get("username", "")
+
+            progress.update(task, description=f"Testing {conn_name}...")
+
+            # Check if this is a Proxmox VM and ensure it's running
+            if auto_start_vms and conn_name in connection_to_vm_info and proxmox_api:
+                node_name, vm_id = connection_to_vm_info[conn_name]
+                vm_start_success, vm_start_error = _ensure_proxmox_vm_running(
+                    config, proxmox_api, node_name, vm_id, conn_name, timeout
+                )
+                if not vm_start_success:
+                    # VM couldn't be woken via WoL, record error and skip
+                    results.append({
+                        "name": conn_name,
+                        "protocol": conn_protocol,
+                        "hostname": hostname,
+                        "port": port,
+                        "username": username,
+                        "success": False,
+                        "latency_ms": None,
+                        "error": vm_start_error,
+                        "auth_result": "WoL Failed"
+                    })
+                    progress.advance(task)
+                    continue
+
+            # Test connectivity
+            success = False
+            error_msg = ""
+            latency_ms = None
+            auth_result = "N/A"
+
+            if hostname and port:
+                try:
+                    # Convert port to int, handling string values
+                    try:
+                        port_int = int(port)
+                        if port_int <= 0 or port_int > 65535:
+                            raise ValueError(f"Invalid port number: {port_int}")
+                    except (ValueError, TypeError) as port_err:
+                        error_msg = f"Invalid port value: {port}"
+                        auth_result = "Config Error"
+                        results.append({
+                            "name": conn_name,
+                            "protocol": conn_protocol,
+                            "hostname": hostname,
+                            "port": port,
+                            "username": username,
+                            "success": False,
+                            "latency_ms": None,
+                            "error": error_msg,
+                            "auth_result": auth_result
+                        })
+                        progress.advance(task)
+                        continue
+
+                    start_time = time.time()
+
+                    if test_auth:
+                        # Protocol-specific authentication tests
+                        if conn_protocol.lower() == "ssh":
+                            success, error_msg = _test_ssh_connection(
+                                hostname, port_int, username, password, timeout
+                            )
+                            auth_result = "Auth OK" if success else "Auth Failed"
+                        elif conn_protocol.lower() == "rdp":
+                            success, error_msg = _test_rdp_connection(
+                                hostname, port_int, username, password, timeout
+                            )
+                            auth_result = "Auth OK" if success else "Auth Failed"
+                        elif conn_protocol.lower() == "vnc":
+                            success, error_msg = _test_vnc_connection(
+                                hostname, port_int, password, timeout
+                            )
+                            auth_result = "Auth OK" if success else "Auth Failed"
+                        else:
+                            # Fallback to socket test for unknown protocols
+                            success, error_msg = _test_socket_connection(
+                                hostname, port_int, timeout
+                            )
+                            auth_result = "Port Open" if success else "Port Closed"
+                    else:
+                        # Socket-only test
+                        success, error_msg = _test_socket_connection(
+                            hostname, port_int, timeout
+                        )
+                        auth_result = "Port Open" if success else "Port Closed"
+
+                    end_time = time.time()
+                    latency_ms = round((end_time - start_time) * 1000, 2)
+
+                except socket.timeout:
+                    error_msg = f"Timeout after {timeout}s"
+                    auth_result = "Timeout"
+                except socket.gaierror:
+                    error_msg = "DNS resolution failed"
+                    auth_result = "DNS Error"
+                except Exception as e:
+                    error_msg = str(e)
+                    auth_result = "Error"
+            else:
+                error_msg = "Missing hostname or port"
+                auth_result = "Config Error"
+
+            results.append({
+                "name": conn_name,
+                "protocol": conn_protocol,
+                "hostname": hostname,
+                "port": port,
+                "username": username,
+                "success": success,
+                "latency_ms": latency_ms,
+                "error": error_msg,
+                "auth_result": auth_result
+            })
+
+            progress.advance(task)
+
+    # Display results
+    console.print("\n[bold]● Connectivity Test Results[/bold]\n")
+
+    # Create summary table
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Connection", style="white", no_wrap=False)
+    table.add_column("Protocol", style="cyan", justify="center")
+    table.add_column("Endpoint", style="yellow")
+    table.add_column("Status", justify="center")
+    table.add_column("Auth", justify="center")
+    table.add_column("Latency", justify="right")
+
+    success_count = 0
+    fail_count = 0
+
+    for result in results:
+        status_icon = "✓" if result["success"] else "✗"
+        status_color = "green" if result["success"] else "red"
+
+        endpoint = f"{result['hostname']}:{result['port']}" if result['hostname'] else "N/A"
+
+        auth_status = result.get('auth_result', 'N/A')
+        auth_color = "green" if result['success'] else "red" if "Failed" in auth_status else "yellow"
+
+        latency_str = ""
+        if result['success'] and result['latency_ms'] is not None:
+            latency_str = f"{result['latency_ms']}ms"
+        elif result['error']:
+            latency_str = f"[dim]{result['error'][:30]}[/dim]"
+
+        table.add_row(
+            result['name'],
+            result['protocol'].upper(),
+            endpoint,
+            f"[{status_color}]{status_icon}[/{status_color}]",
+            f"[{auth_color}]{auth_status}[/{auth_color}]",
+            latency_str
+        )
+
+        if result['success']:
+            success_count += 1
+        else:
+            fail_count += 1
+
+    console.print(table)
+
+    # Summary
+    console.print(f"\n[bold]Summary:[/bold]")
+    console.print(f"  [green]✓[/green] Successful: {success_count}")
+    console.print(f"  [red]✗[/red] Failed: {fail_count}")
+    console.print(f"  Total tested: {len(results)}")
+
+    # Verbose output
+    if verbose and fail_count > 0:
+        console.print("\n[bold]Failed Connection Details:[/bold]")
+        for result in results:
+            if not result['success']:
+                auth_color = "red" if "Failed" in result.get('auth_result', '') else "yellow"
+                console.print(f"\n[yellow]● {result['name']}[/yellow]")
+                console.print(f"  Protocol: {result['protocol'].upper()}")
+                console.print(f"  Endpoint: {result['hostname']}:{result['port']}")
+                console.print(f"  Username: {result.get('username', 'N/A')}")
+                console.print(f"  Auth Status: [{auth_color}]{result.get('auth_result', 'N/A')}[/{auth_color}]")
+                console.print(f"  Error: [red]{result['error']}[/red]")
+
+    console.input("\n[dim]Press Enter to continue...[/dim]")
 
 
 def edit_connections_interactive() -> bool:
@@ -7989,6 +8563,18 @@ def edit_single_connection(guac_api: Any, item: Dict[str, Any]) -> bool:
     else:
         new_password = console.input("Password (optional): ").strip()
 
+    # Protocol selection
+    current_protocol = item["protocol"]
+    protocol_options = ["rdp", "vnc", "ssh"]
+    new_protocol = enhanced_input(
+        f"Protocol [{current_protocol}]: ", current_protocol, protocol_options
+    ).lower()
+
+    # Validate protocol
+    if new_protocol and new_protocol not in protocol_options:
+        console.print(f"[yellow]⚠ Invalid protocol '{new_protocol}', keeping current ({current_protocol})[/yellow]")
+        new_protocol = current_protocol
+
     # Show confirmation
     console.print("\n[bold]Review changes:[/bold]")
     console.print(f"Name: {current_name} -> [cyan]{new_name}[/cyan]")
@@ -7998,10 +8584,11 @@ def edit_single_connection(guac_api: Any, item: Dict[str, Any]) -> bool:
     console.print(
         f"Password: {'Updated' if new_password != current_password else 'Unchanged'}"
     )
+    console.print(f"Protocol: {current_protocol} -> [cyan]{new_protocol}[/cyan]")
 
-    confirm = console.input("\nSave changes? (y/N): ").strip().lower()
+    confirm = Confirm.ask("\n[cyan]Save changes?[/cyan]", default=False)
 
-    if confirm == "y":
+    if confirm:
         try:
             port_int = int(new_port)
             success = guac_api.update_connection(
@@ -8011,7 +8598,7 @@ def edit_single_connection(guac_api: Any, item: Dict[str, Any]) -> bool:
                 username=new_username,
                 password=new_password,
                 port=port_int,
-                protocol=item["protocol"],
+                protocol=new_protocol,
             )
 
             if success:
@@ -8043,10 +8630,12 @@ def rename_single_group(guac_api: Any, item: Dict[str, Any]) -> bool:
         input("\nPress Enter to continue...")
         return True
 
-    console.print(f"\nRename group '{current_name}' to '[cyan]{new_name}[/cyan]'?")
-    confirm = console.input("Confirm (y/N): ").strip().lower()
+    confirm = Confirm.ask(
+        f"\n[cyan]Rename group '{current_name}' to '[bold]{new_name}[/bold]'?[/cyan]",
+        default=False
+    )
 
-    if confirm == "y":
+    if confirm:
         try:
             success = guac_api.update_connection_group(item["id"], new_name)
             if success:
@@ -8070,7 +8659,7 @@ def delete_single_item(guac_api: Any, item: Dict[str, Any]) -> bool:
     console.print(f"\nThe following {item['type']} will be permanently deleted:")
     console.print(f"  • {item['display']}")
 
-    confirm = console.input("\nType 'DELETE' to confirm deletion: ").strip()
+    confirm = Prompt.ask("\n[red]Type 'DELETE' to confirm deletion[/red]").strip()
 
     if confirm != "DELETE":
         console.print(
@@ -8288,7 +8877,11 @@ def process_single_vm_auto(
 
         return created_count > 0
 
-    except Exception:
+    except Exception as e:
+        console.print(f"   [red]✗ Exception during VM processing: {e}[/red]")
+        import traceback
+        if os.environ.get("GUAC_DEBUG"):
+            console.print(f"   [dim]{traceback.format_exc()}[/dim]")
         return False
 
 
@@ -8597,6 +9190,7 @@ def edit_connection_direct(
     new_username: Optional[str] = None,
     new_password: Optional[str] = None,
     new_port: Optional[int] = None,
+    new_protocol: Optional[str] = None,
     enable_wol: Optional[bool] = None,
     new_mac: Optional[str] = None,
     force: bool = False,
@@ -8610,6 +9204,13 @@ def edit_connection_direct(
             Panel(" Failed to authenticate with Guacamole", border_style="red")
         )
         return False
+
+    # Validate protocol if provided
+    if new_protocol is not None:
+        new_protocol = new_protocol.lower()
+        if new_protocol not in ["rdp", "vnc", "ssh"]:
+            console.print(f"[red]Invalid protocol: {new_protocol}. Must be rdp, vnc, or ssh[/red]")
+            return False
 
     # Find the connection
     connections = guac_api.get_connections()
@@ -8631,6 +9232,7 @@ def edit_connection_direct(
     current_hostname = params.get("hostname", "")
     current_username = params.get("username", "")
     current_port = params.get("port", "")
+    current_protocol = target_conn.get("protocol", "rdp")
     current_wol = params.get("wol-send-packet") == "true"
     current_mac = params.get("wol-mac-addr", "")
 
@@ -8645,6 +9247,7 @@ def edit_connection_direct(
         if new_port is not None
         else int(current_port) if current_port else 3389
     )
+    updated_protocol = new_protocol if new_protocol is not None else current_protocol
     updated_wol = enable_wol if enable_wol is not None else current_wol
     updated_mac = new_mac if new_mac is not None else current_mac
 
@@ -8654,11 +9257,12 @@ def edit_connection_direct(
         console.print(f"Hostname: {current_hostname} -> {updated_hostname}")
         console.print(f"Username: {current_username} -> {updated_username}")
         console.print(f"Port: {current_port} -> {updated_port}")
+        console.print(f"Protocol: {current_protocol} -> {updated_protocol}")
         console.print(f"WoL: {current_wol} -> {updated_wol}")
         console.print(f"MAC: {current_mac} -> {updated_mac}")
 
-        confirm = input("\nProceed with update? (y/N): ").strip().lower()
-        if confirm != "y":
+        confirm = Confirm.ask("\n[cyan]Proceed with update?[/cyan]", default=False)
+        if not confirm:
             console.print("[yellow]Update cancelled[/yellow]")
             return False
 
@@ -8670,7 +9274,7 @@ def edit_connection_direct(
         username=updated_username,
         password=updated_password,
         port=updated_port,
-        protocol=target_conn.get("protocol", "rdp"),
+        protocol=updated_protocol,
         enable_wol=updated_wol,
         mac_address=updated_mac,
     )
@@ -8747,7 +9351,7 @@ def delete_connections_direct(
         for item in items_to_delete:
             console.print(f"  • {item['type'].title()}: {item['name']}")
 
-        confirm = input("\nType 'DELETE' to confirm: ").strip()
+        confirm = Prompt.ask("\n[red]Type 'DELETE' to confirm[/red]").strip()
         if confirm != "DELETE":
             console.print("[yellow]Deletion cancelled[/yellow]")
             return False
@@ -8789,6 +9393,7 @@ def edit_connections_by_pattern(
     new_username: Optional[str] = None,
     new_password: Optional[str] = None,
     new_port: Optional[int] = None,
+    new_protocol: Optional[str] = None,
     enable_wol: Optional[bool] = None,
     new_mac: Optional[str] = None,
     force: bool = False,
@@ -8802,6 +9407,13 @@ def edit_connections_by_pattern(
             Panel(" Failed to authenticate with Guacamole", border_style="red")
         )
         return False
+
+    # Validate protocol if provided
+    if new_protocol is not None:
+        new_protocol = new_protocol.lower()
+        if new_protocol not in ["rdp", "vnc", "ssh"]:
+            console.print(f"[red]Invalid protocol: {new_protocol}. Must be rdp, vnc, or ssh[/red]")
+            return False
 
     # Get all connections
     connections = guac_api.get_connections()
@@ -8853,17 +9465,18 @@ def edit_connections_by_pattern(
             console.print("  Password: -> [updated]")
         if new_port is not None:
             console.print(f"  Port: -> {new_port}")
+        if new_protocol is not None:
+            console.print(f"  Protocol: -> {new_protocol}")
         if enable_wol is not None:
             console.print(f"  WoL: -> {'enabled' if enable_wol else 'disabled'}")
         if new_mac is not None:
             console.print(f"  MAC: -> {new_mac}")
 
-        confirm = (
-            input(f"\nUpdate {len(matching_connections)} connection(s)? (y/N): ")
-            .strip()
-            .lower()
+        confirm = Confirm.ask(
+            f"\n[cyan]Update {len(matching_connections)} connection(s)?[/cyan]",
+            default=False
         )
-        if confirm != "y":
+        if not confirm:
             console.print("[yellow]Update cancelled[/yellow]")
             return False
 
@@ -8876,6 +9489,7 @@ def edit_connections_by_pattern(
             current_hostname = cast(str, params.get("hostname", ""))
             current_username = cast(str, params.get("username", ""))
             current_password = cast(str, params.get("password", ""))
+            current_protocol = cast(str, conn.get("protocol", "rdp"))
             current_port = int(cast(Union[str, int], params.get("port", 3389)))
             current_wol = params.get("wol-send-packet") == "true"
             current_mac = cast(str, params.get("wol-mac-addr", ""))
@@ -8887,7 +9501,7 @@ def edit_connections_by_pattern(
                 username=new_username if new_username is not None else current_username,
                 password=new_password if new_password is not None else current_password,
                 port=new_port if new_port is not None else current_port,
-                protocol=cast(str, conn.get("protocol", "rdp")),
+                protocol=new_protocol if new_protocol is not None else current_protocol,
                 enable_wol=enable_wol if enable_wol is not None else current_wol,
                 mac_address=new_mac if new_mac is not None else current_mac,
             )
@@ -8997,7 +9611,7 @@ def delete_connections_by_pattern(
         for item in items_to_delete:
             console.print(f"  • {item['type'].title()}: {item['name']}")
 
-        confirm = input("\nType 'DELETE' to confirm: ").strip()
+        confirm = Prompt.ask("\n[red]Type 'DELETE' to confirm[/red]").strip()
         if confirm != "DELETE":
             console.print("[yellow]Deletion cancelled[/yellow]")
             return False
@@ -9411,6 +10025,209 @@ def debug_vms() -> None:
         raise typer.Exit(1)
 
 
+def _test_socket_connection(hostname: str, port: int, timeout: float) -> Tuple[bool, str]:
+    """Test basic TCP socket connectivity"""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((hostname, port))
+        sock.close()
+
+        if result == 0:
+            return True, ""
+        else:
+            return False, f"Connection refused (error code: {result})"
+    except socket.timeout:
+        return False, f"Timeout after {timeout}s"
+    except socket.gaierror:
+        return False, "DNS resolution failed"
+    except Exception as e:
+        return False, str(e)
+
+
+def _test_ssh_connection(hostname: str, port: int, username: str, password: str, timeout: float) -> Tuple[bool, str]:
+    """Test SSH connection with authentication (cross-platform: Windows/macOS/Linux)"""
+    try:
+        import paramiko
+
+        # Disable paramiko logging to avoid clutter
+        import logging
+        logging.getLogger("paramiko").setLevel(logging.CRITICAL)
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        try:
+            client.connect(
+                hostname=hostname,
+                port=port,
+                username=username,
+                password=password,
+                timeout=timeout,
+                allow_agent=False,
+                look_for_keys=False,
+                banner_timeout=timeout
+            )
+            client.close()
+            return True, ""
+        except paramiko.AuthenticationException:
+            return False, "Authentication failed - invalid credentials"
+        except paramiko.SSHException as e:
+            error_str = str(e).lower()
+            if "connection refused" in error_str:
+                return False, "Connection refused - SSH service not running"
+            elif "no existing session" in error_str or "no route to host" in error_str:
+                return False, f"Network unreachable: {str(e)}"
+            return False, f"SSH error: {str(e)}"
+        except socket.timeout:
+            return False, f"Connection timeout after {timeout}s"
+        except socket.error as e:
+            return False, f"Socket error: {str(e)}"
+        except Exception as e:
+            return False, f"Connection error: {str(e)}"
+    except ImportError:
+        # Fallback to socket test
+        sock_success, sock_error = _test_socket_connection(hostname, port, timeout)
+        if sock_success:
+            return True, "SSH port open (paramiko not installed for full auth test)"
+        return False, f"{sock_error} (install paramiko for auth testing)"
+
+
+def _test_rdp_connection(hostname: str, port: int, username: str, password: str, timeout: float) -> Tuple[bool, str]:
+    """Test RDP connection with authentication (cross-platform: Windows/macOS/Linux)"""
+    try:
+        import winrm
+        from winrm.protocol import Protocol
+
+        # Suppress winrm warnings
+        import warnings
+        warnings.filterwarnings('ignore', module='winrm')
+
+        # Try WinRM first (often enabled alongside RDP)
+        # Format username for NTLM if needed (DOMAIN\user or user@domain)
+        winrm_username = username
+
+        try:
+            # Try HTTPS WinRM port (5986) first
+            endpoint = f'https://{hostname}:5986/wsman'
+            protocol = Protocol(
+                endpoint=endpoint,
+                transport='ntlm',
+                username=winrm_username,
+                password=password,
+                server_cert_validation='ignore',
+                read_timeout_sec=int(timeout),
+                operation_timeout_sec=int(timeout)
+            )
+            shell_id = protocol.open_shell()
+            protocol.close_shell(shell_id)
+            return True, ""
+        except Exception as https_err:
+            # Try HTTP WinRM port (5985)
+            try:
+                endpoint = f'http://{hostname}:5985/wsman'
+                protocol = Protocol(
+                    endpoint=endpoint,
+                    transport='ntlm',
+                    username=winrm_username,
+                    password=password,
+                    read_timeout_sec=int(timeout),
+                    operation_timeout_sec=int(timeout)
+                )
+                shell_id = protocol.open_shell()
+                protocol.close_shell(shell_id)
+                return True, ""
+            except Exception as http_err:
+                # Check if it's an auth failure
+                error_msg = str(http_err).lower()
+                if "401" in error_msg or "unauthorized" in error_msg or "auth" in error_msg:
+                    return False, "Authentication failed - invalid credentials"
+
+                # If WinRM fails, test if RDP port is open
+                sock_success, sock_error = _test_socket_connection(hostname, port, timeout)
+                if sock_success:
+                    return True, "RDP port open (WinRM unavailable for full auth test)"
+                else:
+                    return False, f"RDP port closed, WinRM unavailable"
+    except ImportError:
+        # Fallback to socket test if pywinrm not installed
+        sock_success, sock_error = _test_socket_connection(hostname, port, timeout)
+        if sock_success:
+            return True, "RDP port open (pywinrm not installed for full auth test)"
+        return False, f"{sock_error} (install pywinrm for auth testing)"
+
+
+def _test_vnc_connection(hostname: str, port: int, password: str, timeout: float) -> Tuple[bool, str]:
+    """Test VNC connection (cross-platform: Windows/macOS/Linux)"""
+    sock = None
+    try:
+        # VNC protocol handshake test
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((hostname, port))
+
+        # Read VNC server version (12 bytes: "RFB XXX.YYY\n")
+        version = sock.recv(12)
+        if not version or len(version) < 12:
+            sock.close()
+            return False, "Invalid VNC server response - incomplete version"
+
+        if not version.startswith(b'RFB '):
+            sock.close()
+            return False, "Invalid VNC server response - not RFB protocol"
+
+        # Send client version back
+        sock.sendall(version)
+
+        # Read security types
+        num_sec_types = sock.recv(1)
+        if len(num_sec_types) == 0:
+            sock.close()
+            return False, "VNC connection failed - no security types"
+
+        num_types = ord(num_sec_types) if isinstance(num_sec_types, bytes) else num_sec_types
+        if num_types == 0:
+            # Connection failed - read reason
+            try:
+                reason_length = int.from_bytes(sock.recv(4), 'big')
+                reason = sock.recv(reason_length).decode('utf-8', errors='ignore')
+                sock.close()
+                return False, f"VNC connection rejected: {reason}"
+            except Exception:
+                if sock:
+                    sock.close()
+                return False, "VNC connection rejected by server"
+
+        # Successfully connected and got security types
+        if sock:
+            sock.close()
+        return True, ""
+
+    except socket.timeout:
+        if sock:
+            sock.close()
+        return False, f"Connection timeout after {timeout}s"
+    except socket.gaierror:
+        if sock:
+            sock.close()
+        return False, "DNS resolution failed"
+    except socket.error as e:
+        if sock:
+            sock.close()
+        return False, f"Socket error: {str(e)}"
+    except Exception as e:
+        if sock:
+            sock.close()
+        return False, f"VNC handshake error: {str(e)}"
+    finally:
+        # Ensure socket is always closed
+        if sock:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
 @app.command("test-network")
 def test_network(
     mac: str = typer.Argument(..., help="MAC address to scan for on the network")
@@ -9443,6 +10260,326 @@ def test_network(
             )
     except Exception as e:
         console.print(f"[red]Error testing network: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("test-connectivity")
+def test_connectivity(
+    connection_pattern: Optional[str] = typer.Option(
+        None, "--connection", "-c", help="Connection name pattern (regex)"
+    ),
+    protocol: Optional[str] = typer.Option(
+        None, "--protocol", "-p", help="Filter by protocol (rdp/ssh/vnc)"
+    ),
+    timeout: float = typer.Option(
+        5.0, "--timeout", "-t", help="Connection timeout in seconds"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed connection information"
+    ),
+    test_auth: bool = typer.Option(
+        True, "--test-auth/--no-test-auth", help="Test actual protocol authentication (not just socket)"
+    ),
+    auto_start_vms: bool = typer.Option(
+        True, "--auto-start-vms/--no-auto-start-vms", help="Auto-start stopped Proxmox VMs during test"
+    ),
+) -> None:
+    """Test connectivity to Guacamole connections with protocol-level validation"""
+    try:
+        config = Config()
+        guac_api = GuacamoleAPI(config)
+
+        if not guac_api.authenticate():
+            console.print("[red]Failed to authenticate with Guacamole[/red]")
+            raise typer.Exit(1)
+
+        console.print(
+            Panel.fit(
+                Text("⬢ Connectivity Test", style="bold cyan"),
+                border_style="cyan",
+                padding=(0, 2),
+            )
+        )
+
+        # Get all connections
+        connections = guac_api.get_connections()
+
+        if not connections:
+            console.print("[yellow]No connections found[/yellow]")
+            return
+
+        # Build connection-to-VM mapping for Proxmox VMs
+        connection_to_vm_info: Dict[str, Tuple[str, int]] = {}
+        proxmox_api = None
+        if auto_start_vms:
+            console.print("[dim]Building Proxmox VM mapping...[/dim]")
+            connection_to_vm_info = _build_connection_to_vm_mapping(config, guac_api)
+            if connection_to_vm_info:
+                console.print(
+                    f"[dim]Found {len(connection_to_vm_info)} Proxmox-managed connections[/dim]"
+                )
+                proxmox_api = ProxmoxAPI(config)
+
+        # Filter connections and fetch detailed parameters
+        filtered_connections = []
+        console.print(f"\n[dim]Fetching connection details...[/dim]")
+
+        for conn_id, conn_data in connections.items():
+            conn_name = conn_data.get("name", "")
+            conn_protocol = conn_data.get("protocol", "")
+
+            # Apply filters
+            if connection_pattern:
+                if not re.search(connection_pattern, conn_name, re.IGNORECASE):
+                    continue
+
+            if protocol:
+                if conn_protocol.lower() != protocol.lower():
+                    continue
+
+            # Fetch detailed connection parameters
+            detailed_conn = guac_api.get_connection_details(conn_id)
+            if detailed_conn:
+                filtered_connections.append((conn_id, detailed_conn))
+            else:
+                # Fallback to basic data if details fetch fails
+                filtered_connections.append((conn_id, conn_data))
+
+        if not filtered_connections:
+            console.print("[yellow]No connections match the specified filters[/yellow]")
+            return
+
+        test_mode = "Protocol Authentication" if test_auth else "Socket Connectivity"
+        console.print(f"\n[bold]Testing {len(filtered_connections)} connection(s) - Mode: {test_mode}[/bold]\n")
+
+        # Test each connection
+        results = []
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Testing connections...", total=len(filtered_connections))
+
+            for conn_id, conn_data in filtered_connections:
+                conn_name = conn_data.get("name", "Unknown")
+                conn_protocol = conn_data.get("protocol", "unknown")
+                parameters = conn_data.get("parameters", {})
+
+                # Extract connection parameters with fallbacks for different Guacamole versions
+                hostname = parameters.get("hostname") or parameters.get("host") or ""
+                port = parameters.get("port") or ""
+                username = parameters.get("username") or parameters.get("user") or ""
+                password = parameters.get("password") or parameters.get("passwd") or ""
+
+                # If parameters are missing, try to get from top-level connection data
+                if not hostname:
+                    hostname = conn_data.get("hostname", "")
+                if not port:
+                    port = conn_data.get("port", "")
+                if not username:
+                    username = conn_data.get("username", "")
+
+                progress.update(task, description=f"Testing {conn_name}...")
+
+                # Check if this is a Proxmox VM and ensure it's running
+                if auto_start_vms and conn_name in connection_to_vm_info and proxmox_api:
+                    node_name, vm_id = connection_to_vm_info[conn_name]
+                    vm_start_success, vm_start_error = _ensure_proxmox_vm_running(
+                        config, proxmox_api, node_name, vm_id, conn_name, timeout
+                    )
+                    if not vm_start_success:
+                        # VM couldn't be woken via WoL, record error and skip
+                        results.append({
+                            "name": conn_name,
+                            "protocol": conn_protocol,
+                            "hostname": hostname,
+                            "port": port,
+                            "username": username,
+                            "success": False,
+                            "latency_ms": None,
+                            "error": vm_start_error,
+                            "auth_result": "WoL Failed"
+                        })
+                        progress.advance(task)
+                        continue
+
+                # Test connectivity
+                success = False
+                error_msg = ""
+                latency_ms = None
+                auth_result = "N/A"
+
+                if hostname and port:
+                    try:
+                        # Convert port to int, handling string values
+                        try:
+                            port_int = int(port)
+                            if port_int <= 0 or port_int > 65535:
+                                raise ValueError(f"Invalid port number: {port_int}")
+                        except (ValueError, TypeError) as port_err:
+                            error_msg = f"Invalid port value: {port}"
+                            auth_result = "Config Error"
+                            results.append({
+                                "name": conn_name,
+                                "protocol": conn_protocol,
+                                "hostname": hostname,
+                                "port": port,
+                                "username": username,
+                                "success": False,
+                                "latency_ms": None,
+                                "error": error_msg,
+                                "auth_result": auth_result
+                            })
+                            progress.advance(task)
+                            continue
+
+                        start_time = time.time()
+
+                        if test_auth:
+                            # Protocol-specific authentication tests
+                            if conn_protocol.lower() == "ssh":
+                                success, error_msg = _test_ssh_connection(
+                                    hostname, port_int, username, password, timeout
+                                )
+                                auth_result = "Auth OK" if success else "Auth Failed"
+                            elif conn_protocol.lower() == "rdp":
+                                success, error_msg = _test_rdp_connection(
+                                    hostname, port_int, username, password, timeout
+                                )
+                                auth_result = "Auth OK" if success else "Auth Failed"
+                            elif conn_protocol.lower() == "vnc":
+                                success, error_msg = _test_vnc_connection(
+                                    hostname, port_int, password, timeout
+                                )
+                                auth_result = "Auth OK" if success else "Auth Failed"
+                            else:
+                                # Fallback to socket test for unknown protocols
+                                success, error_msg = _test_socket_connection(
+                                    hostname, port_int, timeout
+                                )
+                                auth_result = "Port Open" if success else "Port Closed"
+                        else:
+                            # Socket-only test
+                            success, error_msg = _test_socket_connection(
+                                hostname, port_int, timeout
+                            )
+                            auth_result = "Port Open" if success else "Port Closed"
+
+                        end_time = time.time()
+                        latency_ms = round((end_time - start_time) * 1000, 2)
+
+                    except socket.timeout:
+                        error_msg = f"Timeout after {timeout}s"
+                        auth_result = "Timeout"
+                    except socket.gaierror:
+                        error_msg = "DNS resolution failed"
+                        auth_result = "DNS Error"
+                    except Exception as e:
+                        error_msg = str(e)
+                        auth_result = "Error"
+                else:
+                    # Provide more specific error message
+                    if not hostname and not port:
+                        error_msg = "Missing hostname and port in connection config"
+                    elif not hostname:
+                        error_msg = "Missing hostname in connection config"
+                    elif not port:
+                        error_msg = "Missing port in connection config"
+                    else:
+                        error_msg = "Missing hostname or port"
+                    auth_result = "Config Error"
+
+                results.append({
+                    "name": conn_name,
+                    "protocol": conn_protocol,
+                    "hostname": hostname,
+                    "port": port,
+                    "username": username,
+                    "success": success,
+                    "latency_ms": latency_ms,
+                    "error": error_msg,
+                    "auth_result": auth_result
+                })
+
+                progress.advance(task)
+
+        # Display results
+        console.print("\n[bold]● Connectivity Test Results[/bold]\n")
+
+        # Create summary table
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Connection", style="white", no_wrap=False)
+        table.add_column("Protocol", style="cyan", justify="center")
+        table.add_column("Endpoint", style="yellow")
+        table.add_column("Status", justify="center")
+        table.add_column("Auth", justify="center")
+        table.add_column("Latency", justify="right")
+
+        success_count = 0
+        fail_count = 0
+
+        for result in results:
+            status_icon = "✓" if result["success"] else "✗"
+            status_color = "green" if result["success"] else "red"
+
+            endpoint = f"{result['hostname']}:{result['port']}" if result['hostname'] else "N/A"
+
+            auth_status = result.get('auth_result', 'N/A')
+            auth_color = "green" if result['success'] else "red" if "Failed" in auth_status else "yellow"
+
+            latency_str = ""
+            if result['success'] and result['latency_ms'] is not None:
+                latency_str = f"{result['latency_ms']}ms"
+            elif result['error']:
+                latency_str = f"[dim]{result['error'][:30]}[/dim]"
+
+            table.add_row(
+                result['name'],
+                result['protocol'].upper(),
+                endpoint,
+                f"[{status_color}]{status_icon}[/{status_color}]",
+                f"[{auth_color}]{auth_status}[/{auth_color}]",
+                latency_str
+            )
+
+            if result['success']:
+                success_count += 1
+            else:
+                fail_count += 1
+
+        console.print(table)
+
+        # Summary
+        console.print(f"\n[bold]Summary:[/bold]")
+        console.print(f"  [green]✓[/green] Successful: {success_count}")
+        console.print(f"  [red]✗[/red] Failed: {fail_count}")
+        console.print(f"  Total tested: {len(results)}")
+
+        # Verbose output
+        if verbose and fail_count > 0:
+            console.print("\n[bold]Failed Connection Details:[/bold]")
+            for result in results:
+                if not result['success']:
+                    auth_status_verbose = result.get('auth_result', 'N/A')
+                    auth_color_verbose = "red" if "Failed" in auth_status_verbose else "yellow"
+                    console.print(f"\n[yellow]● {result['name']}[/yellow]")
+                    console.print(f"  Protocol: {result['protocol'].upper()}")
+                    console.print(f"  Endpoint: {result['hostname']}:{result['port']}")
+                    console.print(f"  Username: {result.get('username', 'N/A')}")
+                    console.print(f"  Auth Status: [{auth_color_verbose}]{auth_status_verbose}[/{auth_color_verbose}]")
+                    console.print(f"  Error: [red]{result['error']}[/red]")
+
+        # Exit with error code if any tests failed
+        if fail_count > 0:
+            raise typer.Exit(1)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]Error during connectivity test: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -9548,6 +10685,12 @@ def edit_connections_cmd(
     new_username: str = typer.Option(None, "--username", "-u", help="Update username"),
     new_password: str = typer.Option(None, "--password", "-p", help="Update password"),
     new_port: int = typer.Option(None, "--port", help="Update port number"),
+    new_protocol: str = typer.Option(
+        None,
+        "--protocol",
+        help="Update protocol (rdp, vnc, ssh)",
+        autocompletion=complete_protocols,
+    ),
     enable_wol: bool = typer.Option(
         None, "--wol/--no-wol", help="Enable/disable Wake-on-LAN"
     ),
@@ -9566,6 +10709,7 @@ def edit_connections_cmd(
                 new_username=new_username,
                 new_password=new_password,
                 new_port=new_port,
+                new_protocol=new_protocol,
                 enable_wol=enable_wol,
                 new_mac=new_mac,
                 force=force,
@@ -9683,13 +10827,14 @@ def interactive_menu() -> None:
                         ("", "═══ Connection Management ═══"),
                         ("1", "● View existing connections"),
                         ("2", "● Edit or delete connections"),
+                        ("3", "● Test connection connectivity"),
                         ("", "═══ Proxmox Sync ═══"),
-                        ("3", "● Select Proxmox VM to add"),
-                        ("4", "● Auto-sync all VMs with credentials"),
+                        ("4", "● Select Proxmox VM to add"),
+                        ("5", "● Auto-sync all VMs with credentials"),
                         ("", "═══ External Hosts ═══"),
-                        ("5", "● Add external (non-Proxmox) host"),
+                        ("6", "● Add external (non-Proxmox) host"),
                         ("", "═══ Tools & Help ═══"),
-                        ("6", "● View available CLI commands"),
+                        ("7", "● View available CLI commands"),
                         ("0", "● Exit to shell"),
                     ]
                 )
@@ -9699,13 +10844,14 @@ def interactive_menu() -> None:
                         ("", "═══ Connection Management ═══"),
                         ("1", "[bold green]⬢[/bold green] ● View existing connections"),
                         ("2", "[bold green]⬢[/bold green] ● Edit or delete connections"),
+                        ("3", "[bold cyan]⬢[/bold cyan] ● Test connection connectivity"),
                         ("", "═══ Proxmox Sync ═══"),
-                        ("3", "[bold orange1]⬢[/bold orange1]→[bold green]⬢[/bold green] ● Select Proxmox VM to add"),
-                        ("4", "[bold orange1]⬢[/bold orange1]→[bold green]⬢[/bold green] ● Auto-sync all VMs with credentials"),
+                        ("4", "[bold orange1]⬢[/bold orange1]→[bold green]⬢[/bold green] ● Select Proxmox VM to add"),
+                        ("5", "[bold orange1]⬢[/bold orange1]→[bold green]⬢[/bold green] ● Auto-sync all VMs with credentials"),
                         ("", "═══ External Hosts ═══"),
-                        ("5", "[bold green]⬢[/bold green] ● Add external (non-Proxmox) host"),
+                        ("6", "[bold green]⬢[/bold green] ● Add external (non-Proxmox) host"),
                         ("", "═══ Tools & Help ═══"),
-                        ("6", "● View available CLI commands"),
+                        ("7", "● View available CLI commands"),
                         ("0", "● Exit to shell"),
                     ]
                 )
@@ -9762,12 +10908,14 @@ def interactive_menu() -> None:
             elif choice == "2":
                 edit_connections_interactive()
             elif choice == "3":
-                interactive_add_vm()
+                interactive_connectivity_test()
             elif choice == "4":
-                auto_process_all_vms(force=False)
+                interactive_add_vm()
             elif choice == "5":
-                interactive_add_vm(start_external=True)
+                auto_process_all_vms(force=False)
             elif choice == "6":
+                interactive_add_vm(start_external=True)
+            elif choice == "7":
                 # Enhanced CLI reference display
                 console.print(
                     Panel.fit(
@@ -9792,6 +10940,7 @@ def interactive_menu() -> None:
                     ("delete", "Delete connections and groups only"),
                     ("autogroup", "Smart connection grouping"),
                     ("test-auth", "Test API authentication"),
+                    ("test-connectivity", "Test connection protocol authentication"),
                     ("test-network", "Test network scanning for MAC"),
                     ("add-external", "Add non-Proxmox host"),
                     ("install-completion", "Install shell TAB completion"),

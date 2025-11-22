@@ -62,6 +62,16 @@ class Config:
     # Supported encodings: raw, rre, corre, hextile, zlib, tight, ultra
     DEFAULT_VNC_ENCODING = "tight"  # Good balance of speed and compression
 
+    # Connectivity Test Settings
+    # These parameters control how long the tool waits for a Proxmox VM to become reachable
+    # when performing connectivity tests (such as IP discovery) and the VM needs to be started
+    # (e.g., via Wake-on-LAN or the Proxmox API). If a VM is powered off and the tool attempts
+    # to discover its IP address or test connectivity, it will start the VM and wait up to
+    # PROXMOX_VM_BOOT_TIMEOUT seconds, checking every PROXMOX_VM_BOOT_CHECK_INTERVAL seconds
+    # to see if the VM is online. These settings are relevant to the connectivity testing
+    # feature described in the README.md.
+    PROXMOX_VM_BOOT_TIMEOUT = 120  # seconds to wait for VM to boot after starting
+    PROXMOX_VM_BOOT_CHECK_INTERVAL = 5  # seconds between boot status checks
     # Encryption settings for password protection in VM notes
     # Generate a new key with: from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())
     ENCRYPTION_KEY = "your_32_character_base64_encryption_key_here"
