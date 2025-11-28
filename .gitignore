@@ -65,3 +65,5 @@ config.py
 *.log
 .dist/
 __pycache__/
+guac_vm_manager.py.new
+guac_vm_manager.py.ori

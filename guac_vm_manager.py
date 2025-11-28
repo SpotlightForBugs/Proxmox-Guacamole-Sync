@@ -365,7 +365,8 @@ def _discover_pending_connections(
                 continue
 
             try:
-                vm_config = prox_api.get_vm_config(node_name, vmid)
+                vm_type = _determine_vm_type(vm)
+                vm_config = prox_api.get_vm_config(node_name, vmid, vm_type)
             except Exception:
                 continue
 
@@ -480,6 +481,11 @@ def find_duplicate_connections(guac_api: "GuacamoleAPI") -> List[Dict[str, Any]]
             })
     
     return duplicate_groups
+
+
+def _determine_vm_type(vm: Dict[str, Any]) -> str:
+    """Normalize VM metadata to a supported API type."""
+    return str(vm.get("vm_type") or vm.get("type") or "qemu").lower()
 
 
 def delete_duplicate_connections(guac_api: "GuacamoleAPI", duplicate_groups: List[Dict[str, Any]]) -> None:
@@ -2768,6 +2774,7 @@ class ProxmoxAPI:
             }
         )
         self._password_overrides: Dict[Tuple[str, str, str], str] = {}
+        self._vm_type_cache: Dict[Tuple[str, str], str] = {}
 
     def _make_request_with_spinner(
         self, method: str, url: str, **kwargs: Any
@@ -2935,8 +2942,42 @@ class ProxmoxAPI:
         m = re.search(r'(?:pass|password):\s*["\']?([^"\';\s]+)', notes, re.IGNORECASE)
         return bool(m)
 
-    def get_vms(self, node: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get list of VMs from all nodes or specific node"""
+    def _normalize_vm_type(self, vm_type: Optional[str]) -> str:
+        """Normalize guest type names to either 'qemu' or 'lxc'."""
+        if not vm_type:
+            return "qemu"
+        vt = str(vm_type).lower()
+        if vt.startswith("lxc") or vt.startswith("pct") or vt == "container":
+            return "lxc"
+        return "qemu"
+
+    def _cache_vm_type(self, node: str, vmid: Union[str, int], vm_type: str) -> None:
+        """Remember the resolved guest type for faster endpoint selection."""
+        key = (node, str(vmid))
+        self._vm_type_cache[key] = self._normalize_vm_type(vm_type)
+
+    def _vm_type_candidates(
+        self, node: str, vmid: Union[str, int], vm_type: Optional[str] = None
+    ) -> List[str]:
+        """Return the order of guest types to attempt for API calls."""
+        if vm_type:
+            normalized = self._normalize_vm_type(vm_type)
+            self._cache_vm_type(node, vmid, normalized)
+            return [normalized]
+        key = (node, str(vmid))
+        cached = self._vm_type_cache.get(key)
+        if cached:
+            return [cached]
+        # Try KVM first, then LXC
+        return ["qemu", "lxc"]
+
+    @staticmethod
+    def _guest_api_path(vm_type: str) -> str:
+        """Return the API segment for a guest type."""
+        return "lxc" if vm_type == "lxc" else "qemu"
+
+    def get_vms(self, node: Optional[str] = None, include_lxc: bool = True) -> List[Dict[str, Any]]:
+        """Get list of guests (QEMU + optional LXC) from all nodes or a specific node."""
         all_vms: List[Dict[str, Any]] = []
 
         if node:
@@ -2944,100 +2985,140 @@ class ProxmoxAPI:
         else:
             nodes = self.get_nodes()
 
+        guest_types = ["qemu"]
+        if include_lxc:
+            guest_types.append("lxc")
+
         for node_info in nodes:
             node_name = node_info["node"]
-            vms_url = f"{self.config.proxmox_base_url}/nodes/{node_name}/qemu"
+            for guest_type in guest_types:
+                vms_url = f"{self.config.proxmox_base_url}/nodes/{node_name}/{guest_type}"
 
-            try:
-                response = self._make_request_with_spinner("get", vms_url)
-                response.raise_for_status()
-                data = response.json()
-                vms = data.get("data", [])
+                try:
+                    response = self._make_request_with_spinner("get", vms_url)
+                    response.raise_for_status()
+                    data = response.json()
+                    vms = data.get("data", [])
 
-                # Add node information to each VM
-                for vm in vms:
-                    vm["node"] = node_name
+                    # Add node/type metadata to each guest
+                    for vm in vms:
+                        vm["node"] = node_name
+                        normalized_type = self._normalize_vm_type(
+                            vm.get("vm_type") or vm.get("type") or guest_type
+                        )
+                        vm["vm_type"] = normalized_type
+                        self._cache_vm_type(node_name, vm.get("vmid", ""), normalized_type)
 
-                all_vms.extend(vms)
-            except requests.exceptions.RequestException as e:
-                print(f"Failed to get VMs from node {node_name}: {e}")
+                    all_vms.extend(vms)
+                except requests.exceptions.RequestException as e:
+                    print(f"Failed to get {guest_type.upper()} guests from node {node_name}: {e}")
 
         return all_vms
 
-    def get_vm_config(self, node: str, vmid: int) -> Dict[str, Any]:
-        """Get VM configuration including network information"""
-        config_url = f"{self.config.proxmox_base_url}/nodes/{node}/qemu/{vmid}/config"
+    def get_vm_config(self, node: str, vmid: int, vm_type: Optional[str] = None) -> Dict[str, Any]:
+        """Get guest configuration including network information"""
+        candidates = self._vm_type_candidates(node, vmid, vm_type)
+        last_error: Optional[Exception] = None
 
-        try:
-            response = self._make_request_with_spinner("get", config_url)
-            response.raise_for_status()
+        for index, candidate in enumerate(candidates):
+            config_url = f"{self.config.proxmox_base_url}/nodes/{node}/{self._guest_api_path(candidate)}/{vmid}/config"
+
+            try:
+                response = self._make_request_with_spinner("get", config_url)
+            except requests.exceptions.RequestException as e:
+                last_error = e
+                continue
+
+            if response.status_code == 404 and index < len(candidates) - 1:
+                # Try next guest type (likely LXC)
+                continue
+
+            try:
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                last_error = e
+                continue
+
             data = response.json()
+            self._cache_vm_type(node, vmid, candidate)
             return cast(Dict[str, Any], data.get("data", {}))
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to get VM config: {e}")
-            return {}
 
-    def update_vm_notes(self, node: str, vmid: int, notes: str) -> bool:
+        if last_error:
+            print(f"Failed to get VM config: {last_error}")
+        return {}
+
+    def update_vm_notes(self, node: str, vmid: int, notes: str, vm_type: Optional[str] = None) -> bool:
         """Update VM notes in Proxmox"""
-        config_url = f"{self.config.proxmox_base_url}/nodes/{node}/qemu/{vmid}/config"
+        candidates = self._vm_type_candidates(node, vmid, vm_type)
 
         try:
             data: Dict[str, str] = {"description": notes}
-            response = self._make_request_with_spinner("put", config_url, data=data)
-            if response.status_code in (200, 204):
-                console.print(
-                    f"[green]Updated VM {vmid} notes with encrypted passwords[/green]"
-                )
-                return True
-            if response.status_code == 405:
-                # Some proxies disallow PUT - try POST with override
+            for index, candidate in enumerate(candidates):
+                config_url = f"{self.config.proxmox_base_url}/nodes/{node}/{self._guest_api_path(candidate)}/{vmid}/config"
                 try:
-                    console.print(
-                        f"[yellow]PUT rejected for {config_url} (405). Trying POST override...[/yellow]"
-                    )
-                    headers = {"X-HTTP-Method-Override": "PUT"}
-                    r = self._make_request_with_spinner(
-                        "post", config_url, data=data, headers=headers
-                    )
-                    if r.status_code in (200, 201, 204):
-                        console.print(
-                            f"[green]Updated VM {vmid} notes via POST override[/green]"
-                        )
-                        return True
-                    r2 = self._make_request_with_spinner(
-                        "post", f"{config_url}?_method=PUT", data=data
-                    )
-                    if r2.status_code in (200, 201, 204):
-                        console.print(
-                            f"[green]Updated VM {vmid} notes via POST?_method=PUT[/green]"
-                        )
-                        return True
-                    console.print(
-                        Panel(
-                            f"Failed to update VM notes via override: {r.status_code}\n{r.text}",
-                            title="VM note update failed",
-                            border_style="red",
-                        )
-                    )
-                    return False
+                    response = self._make_request_with_spinner("put", config_url, data=data)
                 except requests.exceptions.RequestException as e:
+                    if index == len(candidates) - 1:
+                        raise
+                    continue
+
+                if response.status_code in (200, 204):
                     console.print(
-                        Panel(
-                            f"Failed to update VM notes via override: {e}",
-                            title="VM note update failed",
-                            border_style="red",
+                        f"[green]Updated VM {vmid} notes with encrypted passwords[/green]"
+                    )
+                    self._cache_vm_type(node, vmid, candidate)
+                    return True
+                if response.status_code == 405:
+                    # Some proxies disallow PUT - try POST with override
+                    try:
+                        console.print(
+                            f"[yellow]PUT rejected for {config_url} (405). Trying POST override...[/yellow]"
                         )
-                    )
-                    return False
-            else:
-                console.print(
-                    Panel(
-                        f"Failed to update VM notes: {response.status_code}\n{response.text}",
-                        title="VM note update failed",
-                        border_style="red",
-                    )
+                        headers = {"X-HTTP-Method-Override": "PUT"}
+                        r = self._make_request_with_spinner(
+                            "post", config_url, data=data, headers=headers
+                        )
+                        if r.status_code in (200, 201, 204):
+                            console.print(
+                                f"[green]Updated VM {vmid} notes via POST override[/green]"
+                            )
+                            self._cache_vm_type(node, vmid, candidate)
+                            return True
+                        r2 = self._make_request_with_spinner(
+                            "post", f"{config_url}?_method=PUT", data=data
+                        )
+                        if r2.status_code in (200, 201, 204):
+                            console.print(
+                                f"[green]Updated VM {vmid} notes via POST?_method=PUT[/green]"
+                            )
+                            self._cache_vm_type(node, vmid, candidate)
+                            return True
+                        console.print(
+                            Panel(
+                                f"Failed to update VM notes via override: {r.status_code}\n{r.text}",
+                                title="VM note update failed",
+                                border_style="red",
+                            )
+                        )
+                        return False
+                    except requests.exceptions.RequestException as e:
+                        console.print(
+                            Panel(
+                                f"Failed to update VM notes via override: {e}",
+                                title="VM note update failed",
+                                border_style="red",
+                            )
+                        )
+                        return False
+            # Only reached if loop finishes without returning
+            console.print(
+                Panel(
+                    f"Failed to update VM notes: no matching endpoint for {vmid}",
+                    title="VM note update failed",
+                    border_style="red",
                 )
-                return False
+            )
+            return False
         except requests.exceptions.RequestException as e:
             console.print(
                 Panel(
@@ -3048,9 +3129,9 @@ class ProxmoxAPI:
             )
             return False
 
-    def get_vm_notes(self, node: str, vmid: int) -> str:
+    def get_vm_notes(self, node: str, vmid: int, vm_type: Optional[str] = None) -> str:
         """Get VM notes/description and automatically encrypt passwords if needed"""
-        config = self.get_vm_config(node, vmid)
+        config = self.get_vm_config(node, vmid, vm_type)
         # Notes can be in 'description' or 'notes' field, and may be URL-encoded
         notes = config.get("description", "") or config.get("notes", "")
 
@@ -3065,7 +3146,7 @@ class ProxmoxAPI:
 
         # Process notes to encrypt passwords and update VM if needed
         if notes:
-            notes = self.process_and_update_vm_notes(node, vmid, notes)
+            notes = self.process_and_update_vm_notes(node, vmid, notes, vm_type)
 
         return cast(str, notes)
 
@@ -3141,6 +3222,7 @@ class ProxmoxAPI:
             protocols_str = params.get(
                 "protocols", params.get("protos", params.get("proto", ""))
             ).strip()
+            explicit_ip = params.get("ip", "").strip()
 
             # Handle password decryption if encrypted
             if encrypted_password and not password:
@@ -3277,6 +3359,7 @@ class ProxmoxAPI:
                     template = "{user}@{vmname}-{proto}"  # Default fallback
 
                 # Process all available placeholders
+                effective_ip = explicit_ip or vm_ip
                 placeholders: Dict[str, Optional[str]] = {
                     "vmname": vm_name,
                     "user": username,
@@ -3289,9 +3372,9 @@ class ProxmoxAPI:
                     "node": vm_node,
                     "vmnode": vm_node,
                     "vm_node": vm_node,
-                    "ip": vm_ip,
-                    "vmip": vm_ip,
-                    "vm_ip": vm_ip,
+                    "ip": effective_ip,
+                    "vmip": effective_ip,
+                    "vm_ip": effective_ip,
                     "hostname": hostname,
                     "host": hostname,
                     "port": str(port),
@@ -3315,6 +3398,7 @@ class ProxmoxAPI:
                         "vnc_settings": vnc_overrides,
                         "wol_settings": wol_overrides,
                         "wol_disabled": wol_disabled,
+                        "target_host": explicit_ip or None,
                     }
                 )
 
@@ -3514,7 +3598,9 @@ class ProxmoxAPI:
 
         return "\n".join(updated_lines)
 
-    def process_and_update_vm_notes(self, node: str, vmid: int, notes: str) -> str:
+    def process_and_update_vm_notes(
+        self, node: str, vmid: int, notes: str, vm_type: Optional[str] = None
+    ) -> str:
         """
         Process VM notes to encrypt passwords and update VM if changes are made.
         Returns the processed notes string.
@@ -3606,7 +3692,7 @@ class ProxmoxAPI:
 
         # If changes were made, update the VM notes in Proxmox
         if changes_made and updated_notes != original_notes:
-            if self.update_vm_notes(node, vmid, updated_notes):
+            if self.update_vm_notes(node, vmid, updated_notes, vm_type):
                 print(f"Successfully updated VM {vmid} notes with encrypted passwords")
             else:
                 print(f"Warning: Failed to update VM {vmid} notes in Proxmox")
@@ -3614,9 +3700,14 @@ class ProxmoxAPI:
 
         return updated_notes
 
-    def get_vm_agent_network(self, node: str, vmid: int) -> List[Dict[str, Any]]:
+    def get_vm_agent_network(self, node: str, vmid: int, vm_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """Fetch network information via QEMU guest agent if available"""
-        agent_url = f"{self.config.proxmox_base_url}/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces"
+        guest_candidates = self._vm_type_candidates(node, vmid, vm_type)
+        # LXC containers do not expose QEMU guest agent endpoints
+        if guest_candidates and guest_candidates[0] == "lxc":
+            return []
+
+        agent_url = f"{self.config.proxmox_base_url}/nodes/{node}/{self._guest_api_path('qemu')}/{vmid}/agent/network-get-interfaces"
         try:
             # Use GET and include X-Requested-With to mirror the browser/UI request
             headers = {"X-Requested-With": "XMLHttpRequest"}
@@ -3672,54 +3763,99 @@ class ProxmoxAPI:
             print(f"Warning: Guest agent network query failed for VM {vmid}: {e}")
             return []
 
-    def get_vm_status(self, node: str, vmid: int) -> Dict[str, Any]:
+    def get_vm_status(self, node: str, vmid: int, vm_type: Optional[str] = None) -> Dict[str, Any]:
         """Get VM status information"""
-        status_url = (
-            f"{self.config.proxmox_base_url}/nodes/{node}/qemu/{vmid}/status/current"
-        )
+        candidates = self._vm_type_candidates(node, vmid, vm_type)
 
-        try:
-            response = self._make_request_with_spinner("get", status_url)
-            response.raise_for_status()
+        for index, candidate in enumerate(candidates):
+            status_url = (
+                f"{self.config.proxmox_base_url}/nodes/{node}/{self._guest_api_path(candidate)}/{vmid}/status/current"
+            )
+
+            try:
+                response = self._make_request_with_spinner("get", status_url)
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to get VM status: {e}")
+                return {}
+
+            if response.status_code == 404 and index < len(candidates) - 1:
+                continue
+
+            try:
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to get VM status: {e}")
+                return {}
+
             data = response.json()
+            self._cache_vm_type(node, vmid, candidate)
             return cast(Dict[str, Any], data.get("data", {}))
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to get VM status: {e}")
-            return {}
 
-    def start_vm(self, node: str, vmid: int) -> bool:
+        return {}
+
+    def start_vm(self, node: str, vmid: int, vm_type: Optional[str] = None) -> bool:
         """Start a VM"""
-        start_url = (
-            f"{self.config.proxmox_base_url}/nodes/{node}/qemu/{vmid}/status/start"
-        )
+        candidates = self._vm_type_candidates(node, vmid, vm_type)
 
-        try:
-            response = self.session.post(start_url)
-            response.raise_for_status()
+        for index, candidate in enumerate(candidates):
+            start_url = (
+                f"{self.config.proxmox_base_url}/nodes/{node}/{self._guest_api_path(candidate)}/{vmid}/status/start"
+            )
+
+            try:
+                response = self.session.post(start_url)
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to start VM {vmid}: {e}")
+                return False
+
+            if response.status_code == 404 and index < len(candidates) - 1:
+                continue
+
+            try:
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to start VM {vmid}: {e}")
+                return False
+
             print(f"Started VM {vmid} on node {node}")
+            self._cache_vm_type(node, vmid, candidate)
             return True
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to start VM {vmid}: {e}")
-            return False
 
-    def stop_vm(self, node: str, vmid: int) -> bool:
+        return False
+
+    def stop_vm(self, node: str, vmid: int, vm_type: Optional[str] = None) -> bool:
         """Stop a VM"""
-        stop_url = (
-            f"{self.config.proxmox_base_url}/nodes/{node}/qemu/{vmid}/status/stop"
-        )
+        candidates = self._vm_type_candidates(node, vmid, vm_type)
 
-        try:
-            response = self.session.post(stop_url)
-            response.raise_for_status()
+        for index, candidate in enumerate(candidates):
+            stop_url = (
+                f"{self.config.proxmox_base_url}/nodes/{node}/{self._guest_api_path(candidate)}/{vmid}/status/stop"
+            )
+
+            try:
+                response = self.session.post(stop_url)
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to stop VM {vmid}: {e}")
+                return False
+
+            if response.status_code == 404 and index < len(candidates) - 1:
+                continue
+
+            try:
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                print(f"Failed to stop VM {vmid}: {e}")
+                return False
+
             print(f"Stopped VM {vmid} on node {node}")
+            self._cache_vm_type(node, vmid, candidate)
             return True
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to stop VM {vmid}: {e}")
-            return False
 
-    def get_vm_network_info(self, node: str, vmid: int) -> List[Dict[str, Any]]:
+        return False
+
+    def get_vm_network_info(self, node: str, vmid: int, vm_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """Extract network interface information including MAC and IP details"""
-        config = self.get_vm_config(node, vmid)
+        config = self.get_vm_config(node, vmid, vm_type)
         network_interfaces: List[Dict[str, Any]] = []
 
         # Parse static config (net0, net1, ...)
@@ -3751,7 +3887,7 @@ class ProxmoxAPI:
                 network_interfaces.append(net_info)
 
         # Attempt to enrich with guest agent data for live IPs
-        agent_interfaces = self.get_vm_agent_network(node, vmid)
+        agent_interfaces = self.get_vm_agent_network(node, vmid, vm_type)
         agent_by_mac: Dict[str, Dict[str, Any]] = {}
         for iface in agent_interfaces:
             hardware_mac = iface.get("hardware-address")
@@ -4153,6 +4289,8 @@ def interactive_add_vm(
 
     # Initialize variables
     selected_hostname: Optional[str] = None
+    hostname_overridden = False
+    ip_from_notes = False
 
     console.print(
         Panel.fit("[bold]Add Connection to Guacamole[/bold]", border_style="cyan")
@@ -4209,7 +4347,8 @@ def interactive_add_vm(
 
             # Check if VM has credentials in notes
             try:
-                vm_config = proxmox_api.get_vm_config(node_name, vm_id)
+                vm_type = _determine_vm_type(vm)
+                vm_config = proxmox_api.get_vm_config(node_name, vm_id, vm_type)
                 notes = vm_config.get("description", "")
                 # Capture memory for later display (try common keys)
                 vm_mem = None
@@ -4648,6 +4787,7 @@ def interactive_add_vm(
         # Handle Proxmox VM configuration
         vm_name = selected_vm.get("name", f"VM-{selected_vm.get('vmid')}")
         vm_node = selected_vm.get("node")
+        vm_type = _determine_vm_type(selected_vm)
         if not vm_node:
             vm_node = input("Proxmox node for this VM (e.g., pve): ").strip()
             if not vm_node:
@@ -4669,17 +4809,35 @@ def interactive_add_vm(
         )
 
         # Check VM status
-        vm_status = proxmox_api.get_vm_status(vm_node, vm_id)
+        vm_status = proxmox_api.get_vm_status(vm_node, vm_id, vm_type)
         original_status = vm_status.get("status", "unknown")
         console.print(f"VM Status: [magenta]{original_status}[/magenta]")
 
         # Get VM notes for credential parsing
-        vm_notes = proxmox_api.get_vm_notes(vm_node, vm_id)
+        vm_notes = proxmox_api.get_vm_notes(vm_node, vm_id, vm_type)
         parsed_credentials = proxmox_api.parse_credentials_from_notes(
             vm_notes, vm_name, str(vm_id), vm_node, "unknown"
         )
 
         if parsed_credentials:
+            hosts_from_notes = [
+                cast(str, cred.get("target_host"))
+                for cred in parsed_credentials
+                if cred.get("target_host")
+            ]
+            if hosts_from_notes and len(hosts_from_notes) == len(parsed_credentials):
+                ip_from_notes = True
+                ordered_unique_hosts = list(dict.fromkeys(hosts_from_notes))
+                selected_hostname = ordered_unique_hosts[0]
+                console.print(
+                    f"\n[cyan]Using IP from notes:[/cyan] {selected_hostname}"
+                )
+                if len(ordered_unique_hosts) > 1:
+                    console.print(
+                        "[yellow]Warning: Multiple IP addresses specified in notes. "
+                        "Each connection will use its respective IP.[/yellow]"
+                    )
+
             console.print(
                 f"\n[green] Found {len(parsed_credentials)} credential set(s) in VM notes:[/green]"
             )
@@ -4793,7 +4951,7 @@ def interactive_add_vm(
                     network_details = []
                 else:
                     network_details = proxmox_api.get_vm_network_info(
-                        vm_node_str, vm_id_int
+                        vm_node_str, vm_id_int, vm_type
                     )
 
         # Get all MACs from network interfaces
@@ -4855,7 +5013,7 @@ def interactive_add_vm(
                 or start_choice in ("y", "yes")
                 and vm_node
                 and vm_id
-                and proxmox_api.start_vm(vm_node, vm_id)
+                and proxmox_api.start_vm(vm_node, vm_id, vm_type)
             ):
                 vm_was_started = True
                 print(" Waiting 30 seconds for VM to boot and connect to network...")
@@ -4892,7 +5050,7 @@ def interactive_add_vm(
         # selected_hostname is already set for external hosts in the external host section above
     else:
         # IP discovery for Proxmox VMs
-        ip_options = []
+        ip_options: List[Dict[str, Any]] = []
         mac_candidates = []
 
         # First priority: Guest agent IPs (from running VM)
@@ -4916,6 +5074,9 @@ def interactive_add_vm(
                             or interface.get("interface"),
                         }
                     )
+
+            if ip_from_notes:
+                continue
 
             # Collect guest agent IPs (these have highest priority)
             for addr in interface.get("ip_addresses", []):
@@ -4953,135 +5114,137 @@ def interactive_add_vm(
                 guest_agent_ips.append(guest_agent_ip)
                 ip_options.append(guest_agent_ip)
 
-        if guest_agent_ips:
-            console.print(
-                f"[green] Found {len(guest_agent_ips)} IP(s) from guest agent (highest priority)[/green]"
-            )
-        else:
-            console.print("[yellow]  No IPs found from guest agent[/yellow]")
-            console.print("    To enable: install qemu-guest-agent in VM and restart")
-
-        if not is_external_host:
-            selected_hostname = None
-        if network_scan_result:
-            scanned_ip = network_scan_result["ip"]
-            # Check if this IP is already in the options from guest agent
-            if not any(opt["address"] == scanned_ip for opt in ip_options):
-                # Add to end of list (lower priority than guest agent)
-                scanned_option: Dict[str, Any] = {
-                    "label": f"{scanned_ip} (network scan)",
-                    "address": scanned_ip,
-                    "interface": "network-scan",
-                    "mac": found_mac,
-                    "source": "network_scan",
-                }
-                ip_options.append(scanned_option)
-                print(f" Added network-scanned IP: {scanned_ip}")
+        if not ip_from_notes:
+            if guest_agent_ips:
+                console.print(
+                    f"[green] Found {len(guest_agent_ips)} IP(s) from guest agent (highest priority)[/green]"
+                )
             else:
-                print(f" Network scan confirmed existing IP: {scanned_ip}")
+                console.print("[yellow]  No IPs found from guest agent[/yellow]")
+                console.print("    To enable: install qemu-guest-agent in VM and restart")
+
+            if not is_external_host:
+                selected_hostname = None
+            if network_scan_result:
+                scanned_ip = network_scan_result["ip"]
+                # Check if this IP is already in the options from guest agent
+                if not any(opt["address"] == scanned_ip for opt in ip_options):
+                    # Add to end of list (lower priority than guest agent)
+                    scanned_option: Dict[str, Any] = {
+                        "label": f"{scanned_ip} (network scan)",
+                        "address": scanned_ip,
+                        "interface": "network-scan",
+                        "mac": found_mac,
+                        "source": "network_scan",
+                    }
+                    ip_options.append(scanned_option)
+                    print(f" Added network-scanned IP: {scanned_ip}")
+                else:
+                    print(f" Network scan confirmed existing IP: {scanned_ip}")
 
     # Handle IP selection
-    if not is_external_host:
-        selected_hostname = None
+    if not ip_from_notes:
+        if not is_external_host:
+            selected_hostname = None
 
-    if ip_options:
-        # Reorder to prefer IPv4 addresses first while keeping relative ordering inside families
-        try:
-            ipv4_opts = [o for o in ip_options if ":" not in o.get("address", "")]
-            ipv6_opts = [o for o in ip_options if ":" in o.get("address", "")]
-            if ipv4_opts and ipv6_opts:
-                # Preserve original order inside each subset
-                orig_index = {id(o): i for i, o in enumerate(ip_options)}
-                ipv4_opts.sort(key=lambda o: orig_index[id(o)])
-                ipv6_opts.sort(key=lambda o: orig_index[id(o)])
-                ip_options = ipv4_opts + ipv6_opts
-        except Exception:
-            pass
-        console.print("\n[bold]Discovered IP addresses:[/bold]")
-        for idx, option in enumerate(ip_options, start=1):
-            source_icon = (
-                "●"
-                if option.get("source") == "guest_agent"
-                else "○" if option.get("source") == "network_scan" else ""
-            )
-            console.print(f"  {idx}. {source_icon} [green]{option['label']}[/green]")
-        if not auto_approve:
-            console.print("  m.  Enter manually")
-
-        chosen: Optional[Dict[str, Any]] = None
-        if auto_approve:
-            # Auto pick first IPv4 if present
-            chosen = next(
-                (o for o in ip_options if ":" not in o.get("address", "")),
-                ip_options[0],
-            )
-            print(f"Auto-selected (IPv4 preference): {chosen['label']}")
-        else:
-            while True:
-                ip_choice = (
-                    input("Choose IP for Guacamole connection [1]: ").strip().lower()
+        if ip_options:
+            # Reorder to prefer IPv4 addresses first while keeping relative ordering inside families
+            try:
+                ipv4_opts = [o for o in ip_options if ":" not in o.get("address", "")]
+                ipv6_opts = [o for o in ip_options if ":" in o.get("address", "")]
+                if ipv4_opts and ipv6_opts:
+                    # Preserve original order inside each subset
+                    orig_index = {id(o): i for i, o in enumerate(ip_options)}
+                    ipv4_opts.sort(key=lambda o: orig_index[id(o)])
+                    ipv6_opts.sort(key=lambda o: orig_index[id(o)])
+                    ip_options = ipv4_opts + ipv6_opts
+            except Exception:
+                pass
+            console.print("\n[bold]Discovered IP addresses:[/bold]")
+            for idx, option in enumerate(ip_options, start=1):
+                source_icon = (
+                    "●"
+                    if option.get("source") == "guest_agent"
+                    else "○" if option.get("source") == "network_scan" else ""
                 )
-                if ip_choice in ("", "1"):
-                    chosen = ip_options[0]
-                    break
-                if ip_choice == "m":
-                    manual_ip = input("Enter IP address or hostname: ").strip()
+                console.print(f"  {idx}. {source_icon} [green]{option['label']}[/green]")
+            if not auto_approve:
+                console.print("  m.  Enter manually")
+
+            chosen: Optional[Dict[str, Any]] = None
+            if auto_approve:
+                # Auto pick first IPv4 if present
+                chosen = next(
+                    (o for o in ip_options if ":" not in o.get("address", "")),
+                    ip_options[0],
+                )
+                print(f"Auto-selected (IPv4 preference): {chosen['label']}")
+            else:
+                while True:
+                    ip_choice = (
+                        input("Choose IP for Guacamole connection [1]: ").strip().lower()
+                    )
+                    if ip_choice in ("", "1"):
+                        chosen = ip_options[0]
+                        break
+                    if ip_choice == "m":
+                        manual_ip = input("Enter IP address or hostname: ").strip()
+                        if manual_ip:
+                            selected_hostname = manual_ip
+                            break
+                        print("Hostname cannot be empty")
+                        continue
+                    if ip_choice.isdigit():
+                        idx = int(ip_choice) - 1
+                        if 0 <= idx < len(ip_options):
+                            chosen = ip_options[idx]
+                            break
+                    print(
+                        "Invalid choice. Please select from the list or 'm' for manual entry."
+                    )
+
+            if selected_hostname is None and chosen is not None:
+                selected_hostname = chosen["address"]
+                selected_mac = chosen.get("mac")
+                console.print(
+                    f"[cyan]Selected IP:[/cyan] [green]{selected_hostname}[/green]"
+                )
+
+            # Update parsed credentials with actual IP if we have it (Proxmox VMs only)
+            if (
+                (
+                    selected_hostname
+                    and selected_hostname != "unknown"
+                    and parsed_credentials
+                    and not is_external_host
+                )
+                and vm_id is not None
+                and vm_node
+            ):
+                parsed_credentials = proxmox_api.parse_credentials_from_notes(
+                    vm_notes, vm_name, str(vm_id), vm_node, selected_hostname
+                )
+        else:
+            if not is_external_host:
+                # No IP options found - provide helpful guidance (Proxmox only)
+                print(f"\n  No IP addresses could be automatically detected for {vm_name}")
+                print("   This is likely because:")
+                print(
+                    "   • Guest agent is not installed/running (install qemu-guest-agent)"
+                )
+                print("   • VM is stopped or not network accessible")
+                print("   • VM is on a different network segment")
+                print()
+
+                while True:
+                    manual_ip = input("Enter VM IP address/hostname: ").strip()
                     if manual_ip:
                         selected_hostname = manual_ip
                         break
-                    print("Hostname cannot be empty")
-                    continue
-                if ip_choice.isdigit():
-                    idx = int(ip_choice) - 1
-                    if 0 <= idx < len(ip_options):
-                        chosen = ip_options[idx]
-                        break
-                print(
-                    "Invalid choice. Please select from the list or 'm' for manual entry."
-                )
-
-        if selected_hostname is None and chosen is not None:
-            selected_hostname = chosen["address"]
-            selected_mac = chosen.get("mac")
-            console.print(
-                f"[cyan]Selected IP:[/cyan] [green]{selected_hostname}[/green]"
-            )
-
-        # Update parsed credentials with actual IP if we have it (Proxmox VMs only)
-        if (
-            (
-                selected_hostname
-                and selected_hostname != "unknown"
-                and parsed_credentials
-                and not is_external_host
-            )
-            and vm_id is not None
-            and vm_node
-        ):
-            parsed_credentials = proxmox_api.parse_credentials_from_notes(
-                vm_notes, vm_name, str(vm_id), vm_node, selected_hostname
-            )
-    else:
-        if not is_external_host:
-            # No IP options found - provide helpful guidance (Proxmox only)
-            print(f"\n  No IP addresses could be automatically detected for {vm_name}")
-            print("   This is likely because:")
-            print(
-                "   • Guest agent is not installed/running (install qemu-guest-agent)"
-            )
-            print("   • VM is stopped or not network accessible")
-            print("   • VM is on a different network segment")
-            print()
-
-            while True:
-                manual_ip = input("Enter VM IP address/hostname: ").strip()
-                if manual_ip:
-                    selected_hostname = manual_ip
-                    break
-                print("Hostname is required to create connection")
-        else:
-            # External host path: keep original entered hostname
-            pass
+                    print("Hostname is required to create connection")
+            else:
+                # External host path: keep original entered hostname
+                pass
 
     if not selected_hostname:
         console.print("[red]Unable to determine hostname for the connection.[/red]")
@@ -5140,6 +5303,7 @@ def interactive_add_vm(
     # Allow users to override hostname even after selection
     if override_hostname:
         selected_hostname = override_hostname
+        hostname_overridden = True
         print(f"Using overridden hostname: {selected_hostname}")
     elif auto_approve:
         print(f"Using hostname: {selected_hostname}")
@@ -5149,6 +5313,7 @@ def interactive_add_vm(
         ).strip()
         if hostname_override:
             selected_hostname = hostname_override
+            hostname_overridden = True
 
     # Skip protocol selection in auto-approve mode - protocols must come from VM notes
     default_protocol = override_protocol
@@ -5278,6 +5443,11 @@ def interactive_add_vm(
                     "rdp_settings": cred.get("rdp_settings"),
                     "wol_settings": cred.get("wol_settings"),
                     "wol_disabled": cred.get("wol_disabled", False),
+                    "hostname": (
+                        selected_hostname
+                        if hostname_overridden
+                        else (cred.get("target_host") or selected_hostname)
+                    ),
                 }
             )
             print(
@@ -5361,6 +5531,7 @@ def interactive_add_vm(
                     "rdp_settings": None,
                     "wol_settings": None,
                     "wol_disabled": False,
+                    "hostname": selected_hostname,
                 }
             )
 
@@ -5420,8 +5591,9 @@ def interactive_add_vm(
         if existing_conn:
             # Connection exists in target location - check if it needs updating
             params = existing_conn.get("parameters", {})
+            target_host = conn.get("hostname") or selected_hostname
             needs_update = (
-                params.get("hostname") != selected_hostname
+                params.get("hostname") != target_host
                 or params.get("username") != conn["username"]
                 or params.get("password") != conn["password"]
                 or params.get("port") != str(conn["port"])
@@ -5474,7 +5646,7 @@ def interactive_add_vm(
                         conn_enable_wol = enable_wol and not conn.get(
                             "wol_disabled", False
                         )
-                        safe_host = selected_hostname or ""
+                        safe_host = conn.get("hostname") or selected_hostname or ""
                         guac_api.update_connection(
                             identifier=identifier,
                             name=conn["name"],
@@ -5582,7 +5754,7 @@ def interactive_add_vm(
                     if pulled_lines:
                         try:
                             existing_notes = (
-                                proxmox_api.get_vm_notes(vm_node, vm_id) or ""
+                                proxmox_api.get_vm_notes(vm_node, vm_id, vm_type) or ""
                             )
                             # Remove any existing structured lines to avoid duplication
                             note_lines = [
@@ -5592,14 +5764,14 @@ def interactive_add_vm(
                             ]
                             note_lines.extend(pulled_lines)
                             new_notes = "\n".join(note_lines)
-                            if proxmox_api.update_vm_notes(vm_node, vm_id, new_notes):
+                            if proxmox_api.update_vm_notes(vm_node, vm_id, new_notes, vm_type):
                                 print(
                                     "  Updated VM notes with Guacamole connection settings"
                                 )
                                 # Trigger encryption/processing pass
                                 try:
                                     proxmox_api.process_and_update_vm_notes(
-                                        vm_node, vm_id, new_notes
+                                        vm_node, vm_id, new_notes, vm_type
                                     )
                                 except Exception:
                                     pass
@@ -5630,7 +5802,7 @@ def interactive_add_vm(
                 conn, identifier = entry
                 try:
                     conn_enable_wol = enable_wol and not conn.get("wol_disabled", False)
-                    safe_host = selected_hostname or ""
+                    safe_host = conn.get("hostname") or selected_hostname or ""
                     guac_api.update_connection(
                         identifier=identifier,
                         name=conn["name"],
@@ -5734,8 +5906,8 @@ def interactive_add_vm(
         try:
             conn_enable_wol = enable_wol and not conn.get("wol_disabled", False)
             proto = conn["protocol"]
+            safe_host = conn.get("hostname") or selected_hostname or ""
             if proto == "rdp":
-                safe_host = selected_hostname or ""
                 identifier = guac_api.create_rdp_connection(
                     name=conn["name"],
                     hostname=safe_host,
@@ -5749,7 +5921,6 @@ def interactive_add_vm(
                     wol_settings=conn.get("wol_settings"),
                 )
             elif proto == "ssh":
-                safe_host = selected_hostname or ""
                 identifier = guac_api.create_ssh_connection(
                     name=conn["name"],
                     hostname=safe_host,
@@ -5762,7 +5933,6 @@ def interactive_add_vm(
                     wol_settings=conn.get("wol_settings"),
                 )
             else:  # vnc
-                safe_host = selected_hostname or ""
                 identifier = guac_api.create_vnc_connection(
                     name=conn["name"],
                     hostname=safe_host,
@@ -5846,7 +6016,7 @@ def interactive_add_vm(
                 # If vm_notes existed, pass them through the processor; otherwise pass an empty string to prompt creation
                 to_process = vm_notes or ""
                 updated_notes = proxmox_api.process_and_update_vm_notes(
-                    vm_node, vm_id, to_process
+                    vm_node, vm_id, to_process, vm_type
                 )
                 if updated_notes and updated_notes != vm_notes:
                     console.print(
@@ -5890,7 +6060,7 @@ def interactive_add_vm(
                                     else f"{vm_notes.rstrip()}\n\n{new_block}"
                                 )
                                 if proxmox_api.update_vm_notes(
-                                    vm_node, vm_id, combined
+                                    vm_node, vm_id, combined, vm_type
                                 ):
                                     action = "Appended" if vm_notes else "Saved"
                                     console.print(
@@ -5953,7 +6123,7 @@ def interactive_add_vm(
             console.print(
                 f"[blue]Restoring VM to previous power state ({original_status})[/blue]"
             )
-            if vm_node and vm_id and proxmox_api.stop_vm(vm_node, vm_id):
+            if vm_node and vm_id and proxmox_api.stop_vm(vm_node, vm_id, vm_type):
                 console.print(f"[green]VM restored to {original_status} state[/green]")
             else:
                 console.print(
@@ -5968,7 +6138,7 @@ def interactive_add_vm(
                 .lower()
             )
             if restore_choice in ("y", "yes"):
-                if vm_node and vm_id and proxmox_api.stop_vm(vm_node, vm_id):
+                if vm_node and vm_id and proxmox_api.stop_vm(vm_node, vm_id, vm_type):
                     console.print(
                         f"[green]VM restored to {original_status} state[/green]"
                     )
@@ -6029,7 +6199,7 @@ def list_connections(
 
     # Pre-build a mapping of connection names to PVE sources for efficiency
     connection_to_pve_source: Dict[str, str] = {}
-    connection_to_vm_info: Dict[str, Tuple[str, int]] = {}  # Also store VM info for encryption checks
+    connection_to_vm_info: Dict[str, Tuple[str, int, str]] = {}  # Also store VM info for encryption checks
     proxmox_api = None
     try:
         proxmox_api = ProxmoxAPI(config)
@@ -6052,7 +6222,8 @@ def list_connections(
 
                 if vm_id is not None:
                     try:
-                        vm_config = proxmox_api.get_vm_config(node_name, vm_id)
+                        vm_type = _determine_vm_type(vm)
+                        vm_config = proxmox_api.get_vm_config(node_name, vm_id, vm_type)
                         notes = vm_config.get("description", "")
 
                         if notes:
@@ -6075,6 +6246,7 @@ def list_connections(
                                     connection_to_vm_info[connection_name] = (
                                         node_name,
                                         vm_id,
+                                        vm_type,
                                     )
                     except Exception:
                         continue
@@ -6155,9 +6327,9 @@ def list_connections(
             vm_info = connection_to_vm_info.get(name)
             if vm_info and proxmox_api is not None:
                 try:
-                    node_name, vm_id = vm_info
+                    node_name, vm_id, vm_type = vm_info
                     # Get raw VM config to check notes without triggering auto-encryption
-                    vm_config = proxmox_api.get_vm_config(node_name, vm_id)
+                    vm_config = proxmox_api.get_vm_config(node_name, vm_id, vm_type)
                     raw_notes = vm_config.get("description", "") or vm_config.get(
                         "notes", ""
                     )
@@ -6406,7 +6578,8 @@ def collect_out_of_sync_vms(
             continue
 
         try:
-            vm_config = prox_api.get_vm_config(node_name, vm_id)
+            vm_type = _determine_vm_type(vm)
+            vm_config = prox_api.get_vm_config(node_name, vm_id, vm_type)
         except Exception:
             continue
 
@@ -6434,6 +6607,7 @@ def collect_out_of_sync_vms(
                     "node": node_name,
                     "vmid": vm_id,
                     "vm": vm,
+                    "vm_type": vm_type,
                     "name": vm.get("name", f"VM-{vm_id}"),
                     "issues": [
                         "Password decryption failed — run repair to re-enter the credential.",
@@ -6556,6 +6730,7 @@ def collect_out_of_sync_vms(
                     "vm": vm_copy,
                     "node": node_name,
                     "vmid": vm_id,
+                    "vm_type": vm_type,
                     "name": vm.get("name") or str(vm_id),
                     "issues": sync_issues,
                     "credentials": augmented_creds,
@@ -6793,7 +6968,7 @@ def repair_out_of_sync(
         if entry.get("requires_encryption") and entry.get("notes"):
             try:
                 _ = prox_api.process_and_update_vm_notes(
-                    entry["node"], entry["vmid"], entry["notes"]
+                    entry["node"], entry["vmid"], entry["notes"], entry.get("vm_type")
                 )
                 encrypted_count += 1
                 console.print(
@@ -7592,13 +7767,13 @@ def delete_connections_interactive() -> bool:
 
 def _build_connection_to_vm_mapping(
     config: Config, guac_api: GuacamoleAPI
-) -> Dict[str, Tuple[str, int]]:
-    """Build mapping from connection name to Proxmox VM info (node, vmid).
+) -> Dict[str, Tuple[str, int, str]]:
+    """Build mapping from connection name to Proxmox VM info (node, vmid, type).
 
     Returns:
-        Dict mapping connection name to (node_name, vm_id) tuple
+        Dict mapping connection name to (node_name, vm_id, vm_type) tuple
     """
-    connection_to_vm_info: Dict[str, Tuple[str, int]] = {}
+    connection_to_vm_info: Dict[str, Tuple[str, int, str]] = {}
 
     try:
         proxmox_api = ProxmoxAPI(config)
@@ -7621,7 +7796,8 @@ def _build_connection_to_vm_mapping(
 
                 if vm_id is not None:
                     try:
-                        vm_config = proxmox_api.get_vm_config(node_name, vm_id)
+                        vm_type = _determine_vm_type(vm)
+                        vm_config = proxmox_api.get_vm_config(node_name, vm_id, vm_type)
                         notes = vm_config.get("description", "")
 
                         if notes:
@@ -7642,6 +7818,7 @@ def _build_connection_to_vm_mapping(
                                     connection_to_vm_info[connection_name] = (
                                         node_name,
                                         vm_id,
+                                        vm_type,
                                     )
                     except Exception:
                         continue
@@ -7657,6 +7834,7 @@ def _ensure_proxmox_vm_running(
     proxmox_api: ProxmoxAPI,
     node_name: str,
     vm_id: int,
+    vm_type: str,
     connection_name: str,
     timeout: float,
 ) -> Tuple[bool, str]:
@@ -7667,6 +7845,7 @@ def _ensure_proxmox_vm_running(
         proxmox_api: ProxmoxAPI instance
         node_name: Proxmox node name
         vm_id: VM ID
+        vm_type: Guest type ("qemu" or "lxc")
         connection_name: Connection name for display
         timeout: Base timeout for connectivity test
 
@@ -7675,7 +7854,7 @@ def _ensure_proxmox_vm_running(
     """
     try:
         # Check VM status
-        vm_status = proxmox_api.get_vm_status(node_name, vm_id)
+        vm_status = proxmox_api.get_vm_status(node_name, vm_id, vm_type)
         status = vm_status.get("status", "unknown")
 
         # Only start VM if it's actually stopped
@@ -7699,7 +7878,7 @@ def _ensure_proxmox_vm_running(
             )
 
         # Get VM's MAC address from network configuration
-        vm_network_info = proxmox_api.get_vm_network_info(node_name, vm_id)
+        vm_network_info = proxmox_api.get_vm_network_info(node_name, vm_id, vm_type)
         if not vm_network_info:
             return False, "Could not retrieve VM network info for WoL"
 
@@ -7741,7 +7920,7 @@ def _ensure_proxmox_vm_running(
             time.sleep(check_interval)
             elapsed += check_interval
 
-            vm_status = proxmox_api.get_vm_status(node_name, vm_id)
+            vm_status = proxmox_api.get_vm_status(node_name, vm_id, vm_type)
             status = vm_status.get("status", "unknown")
 
             if status == "running":
@@ -7872,7 +8051,7 @@ def interactive_connectivity_test() -> None:
         return
 
     # Build connection-to-VM mapping for Proxmox VMs
-    connection_to_vm_info: Dict[str, Tuple[str, int]] = {}
+    connection_to_vm_info: Dict[str, Tuple[str, int, str]] = {}
     proxmox_api = None
     if auto_start_vms:
         console.print("[dim]Building Proxmox VM mapping...[/dim]")
@@ -7950,9 +8129,9 @@ def interactive_connectivity_test() -> None:
 
             # Check if this is a Proxmox VM and ensure it's running
             if auto_start_vms and conn_name in connection_to_vm_info and proxmox_api:
-                node_name, vm_id = connection_to_vm_info[conn_name]
+                node_name, vm_id, vm_type = connection_to_vm_info[conn_name]
                 vm_start_success, vm_start_error = _ensure_proxmox_vm_running(
-                    config, proxmox_api, node_name, vm_id, conn_name, timeout
+                    config, proxmox_api, node_name, vm_id, vm_type, conn_name, timeout
                 )
                 if not vm_start_success:
                     # VM couldn't be woken via WoL, record error and skip
@@ -8415,8 +8594,9 @@ def edit_single_connection(guac_api: Any, item: Dict[str, Any]) -> bool:
 
                         # Get VM notes and try to parse credentials
                         try:
+                            vm_type = _determine_vm_type(vm)
                             vm_config = proxmox_api.get_vm_config(
-                                node["node"], vm["vmid"]
+                                node["node"], vm["vmid"], vm_type
                             )
                             notes = vm_config.get("description", "")
                             if notes:
@@ -8430,6 +8610,7 @@ def edit_single_connection(guac_api: Any, item: Dict[str, Any]) -> bool:
                                         "vm_name": vm_name,
                                         "credentials": parsed_creds,
                                         "vm_config": vm_config,
+                                        "vm_type": vm_type,
                                     }
                                     is_pve_connection = True
                                     break
@@ -8466,7 +8647,7 @@ def edit_single_connection(guac_api: Any, item: Dict[str, Any]) -> bool:
         # Try to get VM IP from PVE
         try:
             vm_network = proxmox_api.get_vm_network_info(
-                pve_data["node"], pve_data["vmid"]
+                pve_data["node"], pve_data["vmid"], pve_data.get("vm_type")
             )
             for interface in vm_network:
                 if interface.get("inet"):
@@ -8699,10 +8880,17 @@ def process_single_vm_auto(
     """Process a single VM with automatic configuration"""
     vm_id = vm["vmid"]
     vm_name = vm.get("name", f"VM-{vm_id}")
+    vm_type = _determine_vm_type(vm)
+    provided_hosts = [
+        cast(str, cred.get("target_host"))
+        for cred in credentials
+        if cred.get("target_host")
+    ]
+    all_hosts_provided = bool(credentials) and len(provided_hosts) == len(credentials)
 
     try:
         # Check VM status and start if needed
-        vm_status = proxmox_api.get_vm_status(node_name, vm_id)
+        vm_status = proxmox_api.get_vm_status(node_name, vm_id, vm_type)
         original_status = vm_status.get("status", "unknown")
         vm_was_started = False
 
@@ -8710,7 +8898,7 @@ def process_single_vm_auto(
             console.print(
                 f"   [blue] VM is {original_status}. Starting VM for network detection...[/blue]"
             )
-            if proxmox_api.start_vm(node_name, vm_id):
+            if proxmox_api.start_vm(node_name, vm_id, vm_type):
                 vm_was_started = True
                 console.print(
                     "   [yellow] Waiting 30 seconds for VM to boot...[/yellow]"
@@ -8721,10 +8909,10 @@ def process_single_vm_auto(
                 console.print(f"   [red]  Failed to start VM {vm_id}[/red]")
 
         # Get network info to find IP
-        network_details = proxmox_api.get_vm_network_info(node_name, vm_id)
+        network_details = proxmox_api.get_vm_network_info(node_name, vm_id, vm_type)
 
         # Try to find VM IP and collect MACs for WoL
-        vm_ip = None
+        vm_ip = provided_hosts[0] if all_hosts_provided else None
         vm_macs: List[str] = []
 
         for interface in network_details:
@@ -8737,6 +8925,9 @@ def process_single_vm_auto(
             )
             if mac:
                 vm_macs.append(mac)
+
+            if all_hosts_provided:
+                continue
 
             # Find IP address - IPv4 ONLY (no IPv6)
             for addr in interface.get("ip_addresses", []):
@@ -8755,7 +8946,7 @@ def process_single_vm_auto(
             if vm_ip:
                 break
 
-        if not vm_ip:
+        if not vm_ip and not all_hosts_provided:
             # Try network scanning with MAC addresses
             for mac in vm_macs:
                 scan_result = NetworkScanner.find_mac_on_network(mac)
@@ -8766,7 +8957,7 @@ def process_single_vm_auto(
                     )
                     break
 
-        if not vm_ip:
+        if not vm_ip and not all_hosts_provided:
             console.print(
                 f"   [red] Cannot determine IP address for VM {vm_name}[/red]"
             )
@@ -8775,7 +8966,7 @@ def process_single_vm_auto(
                 console.print(
                     f"   [blue] Restoring VM to {original_status} state...[/blue]"
                 )
-                proxmox_api.stop_vm(node_name, vm_id)
+                proxmox_api.stop_vm(node_name, vm_id, vm_type)
             return False
 
         # Create connection group for the VM only if there are multiple connections
@@ -8803,6 +8994,7 @@ def process_single_vm_auto(
                 "port",
                 3389 if protocol == "rdp" else (22 if protocol == "ssh" else 5900),
             )
+            conn_host = cred.get("target_host") or vm_ip
 
             # Get WoL and RDP settings from credentials
             wol_disabled = cred.get("wol_disabled", False)
@@ -8814,7 +9006,7 @@ def process_single_vm_auto(
             if protocol == "rdp":
                 identifier = guac_api.create_rdp_connection(
                     name=connection_name,
-                    hostname=vm_ip,
+                    hostname=conn_host,
                     username=username,
                     password=password,
                     port=port,
@@ -8829,7 +9021,7 @@ def process_single_vm_auto(
                 vnc_settings = cred.get("vnc_settings", {})
                 identifier = guac_api.create_vnc_connection(
                     name=connection_name,
-                    hostname=vm_ip,
+                    hostname=conn_host,
                     password=password,
                     port=port,
                     parent_identifier=parent_identifier,
@@ -8841,7 +9033,7 @@ def process_single_vm_auto(
             elif protocol == "ssh":
                 identifier = guac_api.create_ssh_connection(
                     name=connection_name,
-                    hostname=vm_ip,
+                    hostname=conn_host,
                     username=username,
                     password=password,
                     port=port,
@@ -8866,7 +9058,7 @@ def process_single_vm_auto(
             console.print(
                 f"   [blue] Restoring VM to original state ([cyan]{original_status}[/cyan])...[/blue]"
             )
-            if proxmox_api.stop_vm(node_name, vm_id):
+            if proxmox_api.stop_vm(node_name, vm_id, vm_type):
                 console.print(
                     f"   [green] VM restored to {original_status} state[/green]"
                 )
@@ -8965,7 +9157,8 @@ def auto_process_all_vms(
 
                 # Get VM config to check notes
                 try:
-                    vm_config = proxmox_api.get_vm_config(node_name, vm_id)
+                    vm_type = _determine_vm_type(vm)
+                    vm_config = proxmox_api.get_vm_config(node_name, vm_id, vm_type)
                     notes = vm_config.get("description", "")
 
                     # Parse credentials from notes with smart password recovery
@@ -10309,7 +10502,7 @@ def test_connectivity(
             return
 
         # Build connection-to-VM mapping for Proxmox VMs
-        connection_to_vm_info: Dict[str, Tuple[str, int]] = {}
+        connection_to_vm_info: Dict[str, Tuple[str, int, str]] = {}
         proxmox_api = None
         if auto_start_vms:
             console.print("[dim]Building Proxmox VM mapping...[/dim]")
@@ -10386,9 +10579,9 @@ def test_connectivity(
 
                 # Check if this is a Proxmox VM and ensure it's running
                 if auto_start_vms and conn_name in connection_to_vm_info and proxmox_api:
-                    node_name, vm_id = connection_to_vm_info[conn_name]
+                    node_name, vm_id, vm_type = connection_to_vm_info[conn_name]
                     vm_start_success, vm_start_error = _ensure_proxmox_vm_running(
-                        config, proxmox_api, node_name, vm_id, conn_name, timeout
+                        config, proxmox_api, node_name, vm_id, vm_type, conn_name, timeout
                     )
                     if not vm_start_success:
                         # VM couldn't be woken via WoL, record error and skip
